@@ -1,406 +1,400 @@
 #include "WindowManager.h"
-#include <iostream>
-#include <windows.h>
+#include <QWidget>
+#include <QApplication>
+#include <QScreen>
+#include <QSettings>
 #include <QDebug>
+
+// Private implementation class
+class WindowManager::Impl {
+public:
+    // Active window tracking
+    mutable HWND lastActiveWindow = nullptr;
+};
 
 WindowManager::WindowManager(QObject* parent)
     : QObject(parent)
-    , m_activeWindow(nullptr)
+    , pImpl(std::make_unique<Impl>())
 {
-    // TODO: Initialize window manager
-    // - Set up Windows hooks if needed
-    // - Initialize window tracking
-    
-    std::cout << "WindowManager: Initialized" << std::endl;
+    qDebug() << "WindowManager: Initialized";
 }
 
-WindowManager::~WindowManager()
+WindowManager::~WindowManager() = default;
+
+bool WindowManager::saveWindowState(QWidget* widget, const QString& key)
 {
-    // TODO: Clean up resources
-    // - Remove hooks
-    // - Clean up window handles
+    if (!widget) return false;
+    
+    QSettings settings;
+    settings.beginGroup("WindowStates");
+    settings.beginGroup(key);
+    
+    WindowState state = getWindowState(widget);
+    settings.setValue("geometry", state.geometry);
+    settings.setValue("maximized", state.is_maximized);
+    settings.setValue("fullscreen", state.is_fullscreen);
+    settings.setValue("monitor", state.monitor_name);
+    settings.setValue("flags", state.window_state_flags);
+    
+    settings.endGroup();
+    settings.endGroup();
+    
+    return true;
 }
 
-HWND WindowManager::getActiveWindow() const
+bool WindowManager::restoreWindowState(QWidget* widget, const QString& key)
 {
-    // TODO: Get currently active window
-    // - Use Windows API to get foreground window
-    // - Cache result for performance
+    if (!widget) return false;
     
+    QSettings settings;
+    settings.beginGroup("WindowStates");
+    settings.beginGroup(key);
+    
+    if (!settings.contains("geometry")) {
+        settings.endGroup();
+        settings.endGroup();
+        return false;
+    }
+    
+    WindowState state;
+    state.geometry = settings.value("geometry").toRect();
+    state.is_maximized = settings.value("maximized").toBool();
+    state.is_fullscreen = settings.value("fullscreen").toBool();
+    state.monitor_name = settings.value("monitor").toString();
+    state.window_state_flags = settings.value("flags").toInt();
+    
+    settings.endGroup();
+    settings.endGroup();
+    
+    setWindowState(widget, state);
+    return true;
+}
+
+WindowState WindowManager::getWindowState(QWidget* widget) const
+{
+    WindowState state;
+    if (!widget) return state;
+    
+    state.geometry = widget->geometry();
+    state.is_maximized = widget->isMaximized();
+    state.is_fullscreen = widget->isFullScreen();
+    state.window_state_flags = widget->windowState();
+    
+    // Get monitor info
+    if (QScreen* screen = widget->screen()) {
+        state.monitor_name = screen->name();
+    }
+    
+    return state;
+}
+
+void WindowManager::setWindowState(QWidget* widget, const WindowState& state)
+{
+    if (!widget) return;
+    
+    // Set geometry first
+    widget->setGeometry(state.geometry);
+    
+    // Apply window state
+    if (state.is_maximized) {
+        widget->showMaximized();
+    } else if (state.is_fullscreen) {
+        widget->showFullScreen();
+    } else {
+        widget->showNormal();
+    }
+    
+    emit windowStateChanged(widget, state);
+}
+
+WindowInfo WindowManager::getActiveWindow() const
+{
     HWND hwnd = GetForegroundWindow();
-    if (hwnd != m_activeWindow) {
-        m_activeWindow = hwnd;
-        const_cast<WindowManager*>(this)->emit activeWindowChanged(hwnd);
+    
+    if (hwnd != pImpl->lastActiveWindow) {
+        pImpl->lastActiveWindow = hwnd;
+        WindowInfo info = getWindowInfo(hwnd);
+        const_cast<WindowManager*>(this)->emit activeWindowChanged(info);
     }
     
-    return hwnd;
+    return getWindowInfo(hwnd);
 }
 
-QString WindowManager::getActiveWindowTitle() const
+WindowInfo WindowManager::getWindowInfo(HWND hwnd) const
 {
-    // TODO: Get title of active window
-    // - Get window handle
-    // - Retrieve window text
-    // - Handle Unicode properly
-    
-    HWND hwnd = getActiveWindow();
-    if (!hwnd) {
-        return QString();
-    }
-    
-    const int bufferSize = 256;
-    WCHAR buffer[bufferSize];
-    int length = GetWindowTextW(hwnd, buffer, bufferSize);
-    
-    if (length > 0) {
-        return QString::fromWCharArray(buffer, length);
-    }
-    
-    return QString();
-}
-
-QString WindowManager::getActiveWindowClass() const
-{
-    // TODO: Get class name of active window
-    // - Get window handle
-    // - Retrieve window class
-    // - Useful for identifying application type
-    
-    HWND hwnd = getActiveWindow();
-    if (!hwnd) {
-        return QString();
-    }
-    
-    const int bufferSize = 256;
-    WCHAR buffer[bufferSize];
-    int length = GetClassNameW(hwnd, buffer, bufferSize);
-    
-    if (length > 0) {
-        return QString::fromWCharArray(buffer, length);
-    }
-    
-    return QString();
-}
-
-QString WindowManager::getActiveProcessName() const
-{
-    // TODO: Get process name of active window
-    // - Get window handle
-    // - Get process ID
-    // - Get process name from ID
-    
-    HWND hwnd = getActiveWindow();
-    if (!hwnd) {
-        return QString();
-    }
-    
-    DWORD processId;
-    GetWindowThreadProcessId(hwnd, &processId);
-    
-    HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processId);
-    if (!hProcess) {
-        return QString();
-    }
-    
-    WCHAR processName[MAX_PATH];
-    DWORD size = MAX_PATH;
-    
-    QString result;
-    if (QueryFullProcessImageNameW(hProcess, 0, processName, &size)) {
-        result = QString::fromWCharArray(processName);
-        // Extract just the executable name
-        result = result.mid(result.lastIndexOf('\\') + 1);
-    }
-    
-    CloseHandle(hProcess);
-    return result;
-}
-
-void WindowManager::sendTextToActiveWindow(const QString& text)
-{
-    // TODO: Send text to active window
-    // - Get active window
-    // - Send keystrokes to simulate typing
-    // - Handle special characters and Unicode
-    
-    HWND hwnd = getActiveWindow();
-    if (!hwnd) {
-        std::cout << "WindowManager: No active window to send text to" << std::endl;
-        return;
-    }
-    
-    std::cout << "WindowManager: Sending text to active window: " << text.toStdString() << std::endl;
-    
-    // Ensure window has focus
-    SetForegroundWindow(hwnd);
-    Sleep(100);  // Brief delay to ensure focus
-    
-    // Send each character
-    for (const QChar& ch : text) {
-        sendCharacter(ch);
-    }
-    
-    emit textSent(text);
-}
-
-void WindowManager::sendKeyPress(Qt::Key key, Qt::KeyboardModifiers modifiers)
-{
-    // TODO: Send single key press to active window
-    // - Convert Qt key to Windows virtual key
-    // - Apply modifiers
-    // - Send key down/up events
-    
-    HWND hwnd = getActiveWindow();
-    if (!hwnd) {
-        return;
-    }
-    
-    std::cout << "WindowManager: Sending key press" << std::endl;
-    
-    // Convert Qt key to Windows VK
-    WORD vk = qtKeyToVirtualKey(key);
-    if (vk == 0) {
-        return;
-    }
-    
-    // Apply modifiers
-    if (modifiers & Qt::ControlModifier) {
-        keybd_event(VK_CONTROL, 0, 0, 0);
-    }
-    if (modifiers & Qt::ShiftModifier) {
-        keybd_event(VK_SHIFT, 0, 0, 0);
-    }
-    if (modifiers & Qt::AltModifier) {
-        keybd_event(VK_MENU, 0, 0, 0);
-    }
-    
-    // Send key
-    keybd_event(vk, 0, 0, 0);
-    keybd_event(vk, 0, KEYEVENTF_KEYUP, 0);
-    
-    // Release modifiers
-    if (modifiers & Qt::AltModifier) {
-        keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0);
-    }
-    if (modifiers & Qt::ShiftModifier) {
-        keybd_event(VK_SHIFT, 0, KEYEVENTF_KEYUP, 0);
-    }
-    if (modifiers & Qt::ControlModifier) {
-        keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
-    }
-}
-
-void WindowManager::bringWindowToFront(HWND window)
-{
-    // TODO: Bring specific window to front
-    // - Use Windows API to activate window
-    // - Handle minimized windows
-    
-    if (!window) {
-        return;
-    }
-    
-    std::cout << "WindowManager: Bringing window to front" << std::endl;
-    
-    // Restore if minimized
-    if (IsIconic(window)) {
-        ShowWindow(window, SW_RESTORE);
-    }
-    
-    // Bring to front
-    SetForegroundWindow(window);
-}
-
-QList<WindowInfo> WindowManager::getAllWindows() const
-{
-    // TODO: Get list of all windows
-    // - Enumerate all top-level windows
-    // - Filter out invisible/system windows
-    // - Return window information
-    
-    QList<WindowInfo> windows;
-    
-    // Use static callback function
-    EnumWindows(WindowManager::enumWindowsCallback, reinterpret_cast<LPARAM>(&windows));
-    
-    return windows;
-}
-
-WindowInfo WindowManager::getWindowInfo(HWND window) const
-{
-    // TODO: Get detailed window information
-    // - Get window title, class, process
-    // - Get window position and size
-    // - Get window state
-    
     WindowInfo info;
-    info.handle = window;
+    info.handle = hwnd;
     
-    if (!window) {
-        return info;
-    }
+    if (!hwnd) return info;
     
     // Get title
-    const int bufferSize = 256;
-    WCHAR buffer[bufferSize];
-    int length = GetWindowTextW(window, buffer, bufferSize);
-    if (length > 0) {
-        info.title = QString::fromWCharArray(buffer, length);
-    }
+    info.title = getWindowText(hwnd);
     
     // Get class name
-    length = GetClassNameW(window, buffer, bufferSize);
-    if (length > 0) {
-        info.className = QString::fromWCharArray(buffer, length);
-    }
+    info.class_name = getWindowClassName(hwnd);
     
     // Get process info
     DWORD processId;
-    GetWindowThreadProcessId(window, &processId);
-    info.processId = processId;
+    GetWindowThreadProcessId(hwnd, &processId);
+    info.process_id = processId;
     
     // Get window rect
     RECT rect;
-    if (GetWindowRect(window, &rect)) {
-        info.x = rect.left;
-        info.y = rect.top;
-        info.width = rect.right - rect.left;
-        info.height = rect.bottom - rect.top;
+    if (GetWindowRect(hwnd, &rect)) {
+        info.geometry = rectToQRect(rect);
     }
     
     // Get window state
-    info.isMinimized = IsIconic(window);
-    info.isMaximized = IsZoomed(window);
-    info.isVisible = IsWindowVisible(window);
+    info.is_minimized = IsIconic(hwnd);
+    info.is_visible = IsWindowVisible(hwnd);
     
     return info;
 }
 
-void WindowManager::monitorActiveWindow(bool enable)
+std::vector<WindowInfo> WindowManager::getVisibleWindows() const
 {
-    // TODO: Enable/disable active window monitoring
-    // - Set up timer or hook to track window changes
-    // - Emit signals when active window changes
+    std::vector<WindowInfo> windows;
+    EnumWindows(enumWindowsProc, reinterpret_cast<LPARAM>(&windows));
+    return windows;
+}
+
+std::vector<WindowInfo> WindowManager::findWindowsByTitle(const QString& title_pattern) const
+{
+    std::vector<WindowInfo> allWindows = getVisibleWindows();
+    std::vector<WindowInfo> matches;
     
-    if (enable) {
-        std::cout << "WindowManager: Starting active window monitoring" << std::endl;
-        // TODO: Start monitoring
+    for (const auto& window : allWindows) {
+        if (window.title.contains(title_pattern, Qt::CaseInsensitive)) {
+            matches.push_back(window);
+        }
+    }
+    
+    return matches;
+}
+
+std::vector<WindowInfo> WindowManager::findWindowsByClass(const QString& class_name) const
+{
+    std::vector<WindowInfo> allWindows = getVisibleWindows();
+    std::vector<WindowInfo> matches;
+    
+    for (const auto& window : allWindows) {
+        if (window.class_name.compare(class_name, Qt::CaseInsensitive) == 0) {
+            matches.push_back(window);
+        }
+    }
+    
+    return matches;
+}
+
+void WindowManager::setAlwaysOnTop(QWidget* widget, bool on_top)
+{
+    if (!widget) return;
+    
+    widget->setWindowFlag(Qt::WindowStaysOnTopHint, on_top);
+    widget->show(); // Apply the flag change
+}
+
+bool WindowManager::isAlwaysOnTop(QWidget* widget) const
+{
+    if (!widget) return false;
+    return widget->windowFlags() & Qt::WindowStaysOnTopHint;
+}
+
+void WindowManager::centerOnScreen(QWidget* widget, QScreen* screen)
+{
+    if (!widget) return;
+    
+    if (!screen) {
+        screen = QApplication::primaryScreen();
+    }
+    
+    QRect screenGeometry = screen->availableGeometry();
+    widget->move(screenGeometry.center() - widget->rect().center());
+}
+
+void WindowManager::ensureVisible(QWidget* widget)
+{
+    if (!widget) return;
+    
+    QRect widgetRect = widget->geometry();
+    QScreen* currentScreen = nullptr;
+    
+    // Find which screen contains the widget
+    for (QScreen* screen : QApplication::screens()) {
+        if (screen->geometry().contains(widgetRect.center())) {
+            currentScreen = screen;
+            break;
+        }
+    }
+    
+    // If not on any screen, move to primary
+    if (!currentScreen) {
+        currentScreen = QApplication::primaryScreen();
+        centerOnScreen(widget, currentScreen);
+        return;
+    }
+    
+    // Ensure widget is within screen bounds
+    QRect availableGeometry = currentScreen->availableGeometry();
+    if (!availableGeometry.contains(widgetRect)) {
+        widgetRect.moveLeft(qMax(availableGeometry.left(), 
+                                 qMin(widgetRect.left(), 
+                                      availableGeometry.right() - widgetRect.width())));
+        widgetRect.moveTop(qMax(availableGeometry.top(), 
+                                qMin(widgetRect.top(), 
+                                     availableGeometry.bottom() - widgetRect.height())));
+        widget->move(widgetRect.topLeft());
+    }
+}
+
+std::vector<MonitorInfo> WindowManager::getMonitors() const
+{
+    if (monitors_cached) {
+        return cached_monitors;
+    }
+    
+    cached_monitors.clear();
+    EnumDisplayMonitors(nullptr, nullptr, enumMonitorsProc, 
+                       reinterpret_cast<LPARAM>(&cached_monitors));
+    monitors_cached = true;
+    
+    return cached_monitors;
+}
+
+MonitorInfo WindowManager::getMonitorAt(const QPoint& point) const
+{
+    POINT pt = {point.x(), point.y()};
+    HMONITOR hMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+    
+    MONITORINFO mi;
+    mi.cbSize = sizeof(mi);
+    if (GetMonitorInfo(hMonitor, &mi)) {
+        MonitorInfo info;
+        info.geometry = rectToQRect(mi.rcMonitor);
+        info.available_geometry = rectToQRect(mi.rcWork);
+        info.is_primary = (mi.dwFlags & MONITORINFOF_PRIMARY) != 0;
+        return info;
+    }
+    
+    // Return primary monitor info as fallback
+    MonitorInfo primary;
+    primary.geometry = QApplication::primaryScreen()->geometry();
+    primary.available_geometry = QApplication::primaryScreen()->availableGeometry();
+    primary.is_primary = true;
+    return primary;
+}
+
+MonitorInfo WindowManager::getMonitorForWindow(QWidget* widget) const
+{
+    if (!widget) {
+        return getMonitorAt(QPoint(0, 0));
+    }
+    
+    return getMonitorAt(widget->geometry().center());
+}
+
+void WindowManager::bringToFront(QWidget* widget, bool force)
+{
+    if (!widget) return;
+    
+    HWND hwnd = reinterpret_cast<HWND>(widget->winId());
+    
+    if (force) {
+        // Force window to front
+        DWORD currentThreadId = GetCurrentThreadId();
+        DWORD foregroundThreadId = GetWindowThreadProcessId(GetForegroundWindow(), nullptr);
+        
+        if (currentThreadId != foregroundThreadId) {
+            AttachThreadInput(currentThreadId, foregroundThreadId, TRUE);
+            SetForegroundWindow(hwnd);
+            AttachThreadInput(currentThreadId, foregroundThreadId, FALSE);
+        } else {
+            SetForegroundWindow(hwnd);
+        }
     } else {
-        std::cout << "WindowManager: Stopping active window monitoring" << std::endl;
-        // TODO: Stop monitoring
+        // Normal activation
+        SetForegroundWindow(hwnd);
     }
+    
+    widget->raise();
+    widget->activateWindow();
 }
 
-void WindowManager::sendCharacter(const QChar& ch)
+void WindowManager::flashWindow(QWidget* widget, int count)
 {
-    // TODO: Send single character to active window
-    // - Handle Unicode characters
-    // - Use SendInput for better compatibility
+    if (!widget) return;
     
-    INPUT input[2] = {0};
+    HWND hwnd = reinterpret_cast<HWND>(widget->winId());
     
-    // Key down
-    input[0].type = INPUT_KEYBOARD;
-    input[0].ki.wScan = ch.unicode();
-    input[0].ki.dwFlags = KEYEVENTF_UNICODE;
+    FLASHWINFO fi;
+    fi.cbSize = sizeof(FLASHWINFO);
+    fi.hwnd = hwnd;
+    fi.dwFlags = FLASHW_ALL | (count == 0 ? FLASHW_TIMERNOFG : FLASHW_CAPTION);
+    fi.uCount = count;
+    fi.dwTimeout = 0;
     
-    // Key up
-    input[1].type = INPUT_KEYBOARD;
-    input[1].ki.wScan = ch.unicode();
-    input[1].ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
-    
-    SendInput(2, input, sizeof(INPUT));
-    
-    // Small delay between characters for reliability
-    Sleep(10);
+    FlashWindowEx(&fi);
 }
 
-WORD WindowManager::qtKeyToVirtualKey(Qt::Key key) const
+void WindowManager::setWindowOpacity(QWidget* widget, qreal opacity)
 {
-    // TODO: Convert Qt key code to Windows virtual key
-    // - Map common keys
-    // - Return 0 for unsupported keys
+    if (!widget) return;
+    widget->setWindowOpacity(opacity);
+}
+
+void WindowManager::setWindowShadow(QWidget* widget, bool enabled)
+{
+    if (!widget) return;
     
-    switch (key) {
-        case Qt::Key_A: return 'A';
-        case Qt::Key_B: return 'B';
-        case Qt::Key_C: return 'C';
-        case Qt::Key_D: return 'D';
-        case Qt::Key_E: return 'E';
-        case Qt::Key_F: return 'F';
-        case Qt::Key_G: return 'G';
-        case Qt::Key_H: return 'H';
-        case Qt::Key_I: return 'I';
-        case Qt::Key_J: return 'J';
-        case Qt::Key_K: return 'K';
-        case Qt::Key_L: return 'L';
-        case Qt::Key_M: return 'M';
-        case Qt::Key_N: return 'N';
-        case Qt::Key_O: return 'O';
-        case Qt::Key_P: return 'P';
-        case Qt::Key_Q: return 'Q';
-        case Qt::Key_R: return 'R';
-        case Qt::Key_S: return 'S';
-        case Qt::Key_T: return 'T';
-        case Qt::Key_U: return 'U';
-        case Qt::Key_V: return 'V';
-        case Qt::Key_W: return 'W';
-        case Qt::Key_X: return 'X';
-        case Qt::Key_Y: return 'Y';
-        case Qt::Key_Z: return 'Z';
-        
-        case Qt::Key_0: return '0';
-        case Qt::Key_1: return '1';
-        case Qt::Key_2: return '2';
-        case Qt::Key_3: return '3';
-        case Qt::Key_4: return '4';
-        case Qt::Key_5: return '5';
-        case Qt::Key_6: return '6';
-        case Qt::Key_7: return '7';
-        case Qt::Key_8: return '8';
-        case Qt::Key_9: return '9';
-        
-        case Qt::Key_Space: return VK_SPACE;
-        case Qt::Key_Return: return VK_RETURN;
-        case Qt::Key_Tab: return VK_TAB;
-        case Qt::Key_Backspace: return VK_BACK;
-        case Qt::Key_Delete: return VK_DELETE;
-        case Qt::Key_Escape: return VK_ESCAPE;
-        
-        case Qt::Key_Left: return VK_LEFT;
-        case Qt::Key_Right: return VK_RIGHT;
-        case Qt::Key_Up: return VK_UP;
-        case Qt::Key_Down: return VK_DOWN;
-        
-        case Qt::Key_Home: return VK_HOME;
-        case Qt::Key_End: return VK_END;
-        case Qt::Key_PageUp: return VK_PRIOR;
-        case Qt::Key_PageDown: return VK_NEXT;
-        
-        case Qt::Key_F1: return VK_F1;
-        case Qt::Key_F2: return VK_F2;
-        case Qt::Key_F3: return VK_F3;
-        case Qt::Key_F4: return VK_F4;
-        case Qt::Key_F5: return VK_F5;
-        case Qt::Key_F6: return VK_F6;
-        case Qt::Key_F7: return VK_F7;
-        case Qt::Key_F8: return VK_F8;
-        case Qt::Key_F9: return VK_F9;
-        case Qt::Key_F10: return VK_F10;
-        case Qt::Key_F11: return VK_F11;
-        case Qt::Key_F12: return VK_F12;
-        
-        default: return 0;
+#ifdef Q_OS_WIN
+    HWND hwnd = reinterpret_cast<HWND>(widget->winId());
+    if (enabled) {
+        SetClassLongPtr(hwnd, GCL_STYLE, GetClassLongPtr(hwnd, GCL_STYLE) | CS_DROPSHADOW);
+    } else {
+        SetClassLongPtr(hwnd, GCL_STYLE, GetClassLongPtr(hwnd, GCL_STYLE) & ~CS_DROPSHADOW);
     }
+#endif
 }
 
-BOOL CALLBACK WindowManager::enumWindowsCallback(HWND hwnd, LPARAM lParam)
+void WindowManager::setClickThrough(QWidget* widget, bool click_through)
 {
-    // TODO: Callback for window enumeration
-    // - Filter windows
-    // - Add to list
+    if (!widget) return;
     
-    QList<WindowInfo>* windows = reinterpret_cast<QList<WindowInfo>*>(lParam);
+#ifdef Q_OS_WIN
+    HWND hwnd = reinterpret_cast<HWND>(widget->winId());
+    LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+    
+    if (click_through) {
+        SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TRANSPARENT);
+    } else {
+        SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle & ~WS_EX_TRANSPARENT);
+    }
+#endif
+}
+
+void WindowManager::saveGeometry(QWidget* widget, const QString& key)
+{
+    if (!widget) return;
+    
+    QSettings settings;
+    settings.setValue(key + "/geometry", widget->saveGeometry());
+}
+
+bool WindowManager::restoreGeometry(QWidget* widget, const QString& key)
+{
+    if (!widget) return false;
+    
+    QSettings settings;
+    QByteArray geometry = settings.value(key + "/geometry").toByteArray();
+    if (geometry.isEmpty()) return false;
+    
+    return widget->restoreGeometry(geometry);
+}
+
+// Static callbacks
+BOOL CALLBACK WindowManager::enumWindowsProc(HWND hwnd, LPARAM lParam)
+{
+    std::vector<WindowInfo>* windows = reinterpret_cast<std::vector<WindowInfo>*>(lParam);
     
     // Skip invisible windows
     if (!IsWindowVisible(hwnd)) {
@@ -414,34 +408,86 @@ BOOL CALLBACK WindowManager::enumWindowsCallback(HWND hwnd, LPARAM lParam)
         return TRUE;
     }
     
-    // Create window info
-    WindowInfo info;
-    info.handle = hwnd;
-    info.title = QString::fromWCharArray(buffer, length);
+    // Get window info using a temporary WindowManager instance
+    WindowManager temp(nullptr);
+    WindowInfo info = temp.getWindowInfo(hwnd);
     
-    // Get additional info
-    length = GetClassNameW(hwnd, buffer, 256);
-    if (length > 0) {
-        info.className = QString::fromWCharArray(buffer, length);
-    }
-    
-    DWORD processId;
-    GetWindowThreadProcessId(hwnd, &processId);
-    info.processId = processId;
-    
-    RECT rect;
-    if (GetWindowRect(hwnd, &rect)) {
-        info.x = rect.left;
-        info.y = rect.top;
-        info.width = rect.right - rect.left;
-        info.height = rect.bottom - rect.top;
-    }
-    
-    info.isMinimized = IsIconic(hwnd);
-    info.isMaximized = IsZoomed(hwnd);
-    info.isVisible = true;  // We already filtered invisible windows
-    
-    windows->append(info);
+    windows->push_back(info);
     
     return TRUE;  // Continue enumeration
+}
+
+BOOL CALLBACK WindowManager::enumMonitorsProc(HMONITOR monitor, HDC hdc, 
+                                            LPRECT rect, LPARAM data)
+{
+    std::vector<MonitorInfo>* monitors = reinterpret_cast<std::vector<MonitorInfo>*>(data);
+    
+    MONITORINFOEX mi;
+    mi.cbSize = sizeof(mi);
+    if (!GetMonitorInfo(monitor, &mi)) {
+        return TRUE;
+    }
+    
+    MonitorInfo info;
+    info.name = QString::fromWCharArray(mi.szDevice);
+    info.geometry = QRect(mi.rcMonitor.left, mi.rcMonitor.top,
+                         mi.rcMonitor.right - mi.rcMonitor.left,
+                         mi.rcMonitor.bottom - mi.rcMonitor.top);
+    info.available_geometry = QRect(mi.rcWork.left, mi.rcWork.top,
+                                   mi.rcWork.right - mi.rcWork.left,
+                                   mi.rcWork.bottom - mi.rcWork.top);
+    info.is_primary = (mi.dwFlags & MONITORINFOF_PRIMARY) != 0;
+    
+    // Get DPI scale
+    HDC screenDC = GetDC(nullptr);
+    int logicalDpi = GetDeviceCaps(screenDC, LOGPIXELSX);
+    ReleaseDC(nullptr, screenDC);
+    info.dpi_scale = logicalDpi / 96.0f;
+    
+    monitors->push_back(info);
+    
+    return TRUE;  // Continue enumeration
+}
+
+QString WindowManager::getWindowText(HWND hwnd) const
+{
+    if (!hwnd) return QString();
+    
+    int length = GetWindowTextLengthW(hwnd);
+    if (length == 0) return QString();
+    
+    std::vector<WCHAR> buffer(length + 1);
+    GetWindowTextW(hwnd, buffer.data(), length + 1);
+    
+    return QString::fromWCharArray(buffer.data());
+}
+
+QString WindowManager::getWindowClassName(HWND hwnd) const
+{
+    if (!hwnd) return QString();
+    
+    const int bufferSize = 256;
+    WCHAR buffer[bufferSize];
+    int length = GetClassNameW(hwnd, buffer, bufferSize);
+    
+    if (length > 0) {
+        return QString::fromWCharArray(buffer, length);
+    }
+    
+    return QString();
+}
+
+QRect WindowManager::rectToQRect(const RECT& rect) const
+{
+    return QRect(rect.left, rect.top, 
+                 rect.right - rect.left, 
+                 rect.bottom - rect.top);
+}
+
+QRect WindowManager::applyDpiScaling(const QRect& geometry, float dpi_scale) const
+{
+    return QRect(geometry.x() * dpi_scale,
+                 geometry.y() * dpi_scale,
+                 geometry.width() * dpi_scale,
+                 geometry.height() * dpi_scale);
 }
