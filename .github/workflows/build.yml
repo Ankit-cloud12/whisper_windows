@@ -54,12 +54,23 @@ jobs:
           ${{ runner.os }}-build-${{ matrix.build_type }}-
           ${{ runner.os }}-build-
     
+    - name: Install GTest
+      run: |
+        git clone https://github.com/google/googletest.git
+        cd googletest
+        cmake -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        cmake --build build --config ${{ matrix.build_type }}
+        cmake --install build --prefix ${{ github.workspace }}/gtest-install --config ${{ matrix.build_type }}
+        cd ..
+      shell: pwsh
+    
     - name: Configure CMake
       run: |
         cmake -B build -G "Visual Studio 17 2022" -A x64 `
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
-          -DCMAKE_PREFIX_PATH=${{ env.Qt6_DIR }} `
-          -DBUILD_TESTS=ON
+          -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }};${{ github.workspace }}/gtest-install" `
+          -DBUILD_TESTS=ON `
+          -DGTEST_ROOT="${{ github.workspace }}/gtest-install"
     
     - name: Build
       run: cmake --build build --config ${{ matrix.build_type }} --parallel

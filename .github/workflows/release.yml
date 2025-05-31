@@ -58,25 +58,71 @@ jobs:
         .\download-models.bat
       shell: cmd
     
+    - name: Configure CMake
+      run: |
+        cmake -B build -G "Visual Studio 17 2022" -A x64 `
+          -DCMAKE_BUILD_TYPE=Release `
+          -DCMAKE_PREFIX_PATH=${{ env.Qt6_DIR }} `
+          -DBUILD_TESTS=OFF `
+          -DFETCHCONTENT_QUIET=OFF
+    
     - name: Build Release
       run: |
-        cd scripts
-        .\build-release.bat
-      shell: cmd
-      env:
-        Qt6_DIR: ${{ env.Qt6_DIR }}
+        cmake --build build --config Release --parallel
+      shell: pwsh
     
-    - name: Build Portable Package
+    - name: Package Release
       run: |
-        cd scripts
-        .\build-portable.bat
+        # Create distribution directory
+        New-Item -ItemType Directory -Force -Path build/dist
+        
+        # Copy executable and dependencies
+        Copy-Item build/Release/WhisperApp.exe build/dist/
+        
+        # Deploy Qt dependencies
+        cd build/dist
+        & "${{ env.Qt6_DIR }}/bin/windeployqt.exe" --release --no-translations --no-system-d3d-compiler --no-opengl-sw WhisperApp.exe
+        cd ../..
+        
+        # Copy resources
+        Copy-Item -Recurse resources build/dist/
+        Copy-Item -Recurse config build/dist/
+        Copy-Item README.md build/dist/
+        Copy-Item LICENSE build/dist/
+        Copy-Item CHANGELOG.md build/dist/
+      shell: pwsh
+    
+    - name: Build Installer
+      run: |
+        # Create installer
+        cd installer
+        makensis installer.nsi
       shell: cmd
+    
+    - name: Create Portable Package
+      run: |
+        # Create portable package
+        cd build
+        Compress-Archive -Path dist/* -DestinationPath WhisperApp-${{ github.ref_name }}-portable-win64.zip
+      shell: pwsh
     
     - name: Generate Checksums
       run: |
-        cd scripts
-        .\generate-checksums.bat
-      shell: cmd
+        cd build
+        # Generate checksums
+        $installer = "WhisperApp-${{ github.ref_name }}-Setup.exe"
+        $portable = "WhisperApp-${{ github.ref_name }}-portable-win64.zip"
+        
+        if (Test-Path "../installer/$installer") {
+          $hash = (Get-FileHash "../installer/$installer" -Algorithm SHA256).Hash
+          "$hash  $installer" | Out-File -FilePath "WhisperApp-${{ github.ref_name }}-SHA256.txt"
+        }
+        
+        if (Test-Path $portable) {
+          $hash = (Get-FileHash $portable -Algorithm SHA256).Hash
+          "$hash  $portable" | Add-Content -Path "WhisperApp-${{ github.ref_name }}-SHA256.txt"
+        }
+      shell: pwsh
     
     - name: Upload Build Artifacts
       uses: actions/upload-artifact@v4
