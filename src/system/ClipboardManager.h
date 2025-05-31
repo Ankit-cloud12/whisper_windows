@@ -203,11 +203,32 @@ public:
      */
     bool setClipboardData(const QMimeData* mime_data);
 
+    // New public methods
+    void setText(const QString& text);
+    QString text() const;
+    void clear();
+    // bool hasText() const; // Already exists
+    void appendText(const QString& text);
+    void setRichText(const QString& html);
+    QString richText() const;
+    QStringList formats() const;
+    void copyWithTimestamp(const QString& text);
+    void copyAsMarkdown(const QString& text);
+    bool supportsSelection() const;
+    void setSelectionText(const QString& text);
+    QString selectionText() const;
+
 signals:
     /**
      * @brief Emitted when clipboard content changes
+     * @param text The new clipboard text
      */
-    void clipboardChanged();
+    void clipboardChanged(const QString& text);
+
+    /**
+     * @brief Emitted when the clipboard is cleared
+     */
+    void clipboardCleared();
 
     /**
      * @brief Emitted when text is copied
@@ -282,9 +303,16 @@ private:
      */
     InsertionMethod determineBestMethod(const QString& text) const;
 
+    /**
+     * @brief Strip HTML tags from HTML string
+     * @param html HTML string
+     * @return Plain text string
+     */
+    QString stripHtml(const QString& html) const;
+
 private:
     // Qt clipboard
-    QClipboard* clipboard = nullptr;
+    QClipboard* m_clipboard = nullptr;
     
     // Settings
     InsertionMethod default_method = InsertionMethod::Auto;

@@ -3,6 +3,8 @@
 #include <QClipboard>
 #include <QApplication>
 #include <QMimeData>
+#include <QDateTime>
+#include <QRegularExpression>
 
 ClipboardManager::ClipboardManager(QObject* parent)
     : QObject(parent)
@@ -12,13 +14,20 @@ ClipboardManager::ClipboardManager(QObject* parent)
     // - Get system clipboard instance
     // - Connect clipboard change signals
     
-    m_clipboard = QApplication::clipboard();
-    if (m_clipboard) {
-        connect(m_clipboard, &QClipboard::dataChanged,
-                this, &ClipboardManager::onClipboardChanged);
-        std::cout << "ClipboardManager: Initialized" << std::endl;
+    if (QApplication::instance()) {
+        m_clipboard = QApplication::clipboard();
+        if (m_clipboard) {
+            connect(m_clipboard, &QClipboard::dataChanged,
+                    this, &ClipboardManager::onClipboardChanged);
+            std::cout << "ClipboardManager: Initialized" << std::endl;
+        } else {
+            // This case should ideally not happen if QApplication::instance() is valid
+            // and QApplication::clipboard() returned null, but good to log.
+            std::cerr << "Error: QApplication::clipboard() returned null even with a valid QApplication instance. ClipboardManager may not function correctly." << std::endl;
+        }
     } else {
-        std::cout << "ClipboardManager: Failed to get clipboard instance" << std::endl;
+        std::cerr << "Error: QApplication instance not available. ClipboardManager will not function correctly." << std::endl;
+        // m_clipboard remains nullptr, and no signals are connected.
     }
 }
 
