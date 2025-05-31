@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Download WhisperApp - Free Speech-to-Text Software</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 2rem;
+            text-align: center;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+        }
+        .download-section {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        .download-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        .download-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+        }
+        .download-button {
+            display: inline-block;
+            background: #3498db;
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: bold;
+            margin: 10px 0;
+            transition: background 0.3s;
+        }
+        .download-button:hover {
+            background: #2980b9;
+        }
+        .download-button.secondary {
+            background: #95a5a6;
+        }
+        .download-button.secondary:hover {
+            background: #7f8c8d;
+        }
+        .file-info {
+            font-size: 0.9em;
+            color: #666;
+            margin: 10px 0;
+        }
+        .requirements {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-top: 1rem;
+        }
+        .checksum {
+            font-family: monospace;
+            font-size: 0.8em;
+            background: #f0f0f0;
+            padding: 4px 8px;
+            border-radius: 3px;
+            word-break: break-all;
+        }
+        .mirrors {
+            margin-top: 1rem;
+            font-size: 0.9em;
+        }
+        .version-info {
+            background: #e8f4f8;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 2rem;
+        }
+        .changelog-preview {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-top: 2rem;
+        }
+        code {
+            background: #f0f0f0;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Download WhisperApp</h1>
+        <p>Fast, accurate speech-to-text transcription powered by OpenAI's Whisper</p>
+    </div>
+
+    <div class="version-info">
+        <h2>🎉 Latest Version: {VERSION}</h2>
+        <p>Released: {RELEASE_DATE}</p>
+        <p><a href="#changelog">What's new in this version</a></p>
+    </div>
+
+    <div class="download-section">
+        <h2>Choose Your Download</h2>
+        
+        <div class="download-grid">
+            <div class="download-card">
+                <h3>🚀 Installer (Recommended)</h3>
+                <p>Full installation with all features</p>
+                <a href="{INSTALLER_URL}" class="download-button">
+                    Download Installer
+                </a>
+                <div class="file-info">
+                    <p>WhisperApp-{VERSION}-Setup.exe</p>
+                    <p>Size: {INSTALLER_SIZE} MB</p>
+                    <p>SHA256: <span class="checksum">{INSTALLER_SHA256}</span></p>
+                </div>
+                <div class="requirements">
+                    <strong>Requirements:</strong>
+                    <ul style="text-align: left; margin: 0;">
+                        <li>Windows 10/11 64-bit</li>
+                        <li>Administrator privileges</li>
+                        <li>500 MB disk space</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="download-card">
+                <h3>📦 Portable Version</h3>
+                <p>No installation required</p>
+                <a href="{PORTABLE_URL}" class="download-button secondary">
+                    Download Portable
+                </a>
+                <div class="file-info">
+                    <p>WhisperApp-{VERSION}-portable-win64.zip</p>
+                    <p>Size: {PORTABLE_SIZE} MB</p>
+                    <p>SHA256: <span class="checksum">{PORTABLE_SHA256}</span></p>
+                </div>
+                <div class="requirements">
+                    <strong>Features:</strong>
+                    <ul style="text-align: left; margin: 0;">
+                        <li>Run from any location</li>
+                        <li>USB drive compatible</li>
+                        <li>Settings stored locally</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="mirrors">
+            <h3>Alternative Download Mirrors</h3>
+            <p>
+                Primary: <a href="{PRIMARY_MIRROR}">GitHub Releases</a> |
+                Mirror 1: <a href="{MIRROR1}">SourceForge</a> |
+                Mirror 2: <a href="{MIRROR2}">GitLab</a>
+            </p>
+        </div>
+    </div>
+
+    <div class="download-section">
+        <h2>📋 Installation Instructions</h2>
+        
+        <h3>For Installer Version:</h3>
+        <ol>
+            <li>Download the installer (WhisperApp-{VERSION}-Setup.exe)</li>
+            <li>Right-click and select "Run as administrator"</li>
+            <li>Follow the installation wizard</li>
+            <li>Launch WhisperApp from Start Menu</li>
+            <li>Download language models on first run</li>
+        </ol>
+
+        <h3>For Portable Version:</h3>
+        <ol>
+            <li>Download the ZIP file</li>
+            <li>Extract to your desired location</li>
+            <li>Run WhisperApp-Portable.bat</li>
+            <li>All settings will be saved in the local folder</li>
+        </ol>
+
+        <p>For detailed instructions, see the <a href="{INSTALL_GUIDE_URL}">Installation Guide</a></p>
+    </div>
+
+    <div class="download-section">
+        <h2>🔧 System Requirements</h2>
+        
+        <div class="requirements">
+            <h3>Minimum Requirements:</h3>
+            <ul>
+                <li>Windows 10 64-bit (version 1809 or later)</li>
+                <li>4 GB RAM</li>
+                <li>x64 processor with AVX support</li>
+                <li>500 MB disk space (+ model storage)</li>
+                <li>DirectX 11 compatible graphics</li>
+            </ul>
+
+            <h3>Recommended:</h3>
+            <ul>
+                <li>Windows 11 64-bit</li>
+                <li>8 GB RAM or more</li>
+                <li>Intel Core i5 / AMD Ryzen 5 or better</li>
+                <li>2 GB disk space</li>
+                <li>NVIDIA GPU with CUDA support (for faster processing)</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="download-section" id="changelog">
+        <h2>📝 What's New in Version {VERSION}</h2>
+        
+        <div class="changelog-preview">
+            <h3>Highlights:</h3>
+            <ul>
+                <li>New feature 1</li>
+                <li>New feature 2</li>
+                <li>Performance improvements</li>
+                <li>Bug fixes and stability improvements</li>
+            </ul>
+            
+            <p><a href="{CHANGELOG_URL}">View full changelog</a></p>
+        </div>
+    </div>
+
+    <div class="download-section">
+        <h2>🔐 Verify Your Download</h2>
+        
+        <p>To ensure your download is authentic and hasn't been tampered with:</p>
+        
+        <ol>
+            <li>Download the <a href="{CHECKSUM_URL}">SHA256 checksum file</a></li>
+            <li>Open Command Prompt in your download folder</li>
+            <li>Run: <code>certutil -hashfile WhisperApp-{VERSION}-Setup.exe SHA256</code></li>
+            <li>Compare the output with the checksum provided above</li>
+        </ol>
+        
+        <p>The checksums should match exactly. If they don't, do not use the file.</p>
+    </div>
+
+    <div class="download-section">
+        <h2>❓ Need Help?</h2>
+        
+        <ul>
+            <li>📖 <a href="{USER_GUIDE_URL}">User Guide</a> - Learn how to use WhisperApp</li>
+            <li>🐛 <a href="{ISSUES_URL}">Report Issues</a> - Found a bug? Let us know</li>
+            <li>💬 <a href="{DISCORD_URL}">Discord Community</a> - Get help from the community</li>
+            <li>📧 <a href="mailto:support@whisperapp.example.com">Email Support</a> - Contact our team</li>
+        </ul>
+    </div>
+
+    <footer style="text-align: center; padding: 2rem; color: #666;">
+        <p>WhisperApp is free and open-source software licensed under the MIT License</p>
+        <p>&copy; 2025 WhisperApp Development Team</p>
+    </footer>
+</body>
+</html>

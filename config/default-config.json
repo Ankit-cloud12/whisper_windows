@@ -1,0 +1,86 @@
+{
+  "application": {
+    "version": "1.0.0",
+    "language": "auto",
+    "theme": "default",
+    "startMinimized": false,
+    "minimizeToTray": true,
+    "showTrayNotifications": true,
+    "checkForUpdates": true,
+    "logLevel": "info"
+  },
+  "audio": {
+    "inputDevice": "default",
+    "sampleRate": 16000,
+    "channelCount": 1,
+    "bufferSize": 1024,
+    "vad": {
+      "enabled": true,
+      "threshold": 0.5,
+      "preSpeechPadding": 300,
+      "postSpeechPadding": 500
+    },
+    "noiseReduction": {
+      "enabled": true,
+      "level": "medium"
+    }
+  },
+  "transcription": {
+    "model": "base",
+    "language": "auto",
+    "task": "transcribe",
+    "temperature": 0.0,
+    "beamSize": 5,
+    "bestOf": 5,
+    "maxSegmentLength": 30,
+    "wordTimestamps": true,
+    "autoSave": false,
+    "autoSavePath": "",
+    "copyToClipboard": false,
+    "typeInActiveWindow": false
+  },
+  "hotkeys": {
+    "startRecording": "Ctrl+Shift+R",
+    "stopRecording": "Ctrl+Shift+S",
+    "toggleRecording": "Ctrl+Shift+Space",
+    "cancelRecording": "Escape",
+    "copyLastTranscription": "Ctrl+Shift+C",
+    "showWindow": "Ctrl+Shift+W",
+    "hideWindow": "Ctrl+Shift+H"
+  },
+  "ui": {
+    "fontSize": 11,
+    "fontFamily": "Segoe UI",
+    "showTimestamps": true,
+    "wordWrap": true,
+    "highlightConfidence": true,
+    "animationsEnabled": true,
+    "compactMode": false
+  },
+  "performance": {
+    "gpuAcceleration": "auto",
+    "threadCount": 0,
+    "modelCaching": true,
+    "maxMemoryUsage": 4096,
+    "lowPowerMode": false
+  },
+  "network": {
+    "proxy": {
+      "enabled": false,
+      "type": "http",
+      "host": "",
+      "port": 0,
+      "username": "",
+      "password": ""
+    },
+    "timeout": 30000,
+    "retryCount": 3
+  },
+  "accessibility": {
+    "highContrast": false,
+    "screenReaderSupport": true,
+    "keyboardNavigation": true,
+    "fontScaling": 1.0,
+    "reduceMotion": false
+  }
+}

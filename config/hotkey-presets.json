@@ -1,0 +1,76 @@
+{
+  "presets": {
+    "default": {
+      "name": "Default",
+      "description": "Standard hotkey configuration",
+      "hotkeys": {
+        "startRecording": "Ctrl+Shift+R",
+        "stopRecording": "Ctrl+Shift+S",
+        "toggleRecording": "Ctrl+Shift+Space",
+        "cancelRecording": "Escape",
+        "copyLastTranscription": "Ctrl+Shift+C",
+        "showWindow": "Ctrl+Shift+W",
+        "hideWindow": "Ctrl+Shift+H"
+      }
+    },
+    "minimal": {
+      "name": "Minimal",
+      "description": "Simple setup with only essential hotkeys",
+      "hotkeys": {
+        "toggleRecording": "F9",
+        "cancelRecording": "Escape",
+        "copyLastTranscription": "F10"
+      }
+    },
+    "vim-style": {
+      "name": "Vim Style",
+      "description": "Vim-inspired keyboard shortcuts",
+      "hotkeys": {
+        "startRecording": "Alt+R",
+        "stopRecording": "Alt+S",
+        "toggleRecording": "Alt+Space",
+        "cancelRecording": "Alt+Q",
+        "copyLastTranscription": "Alt+Y",
+        "showWindow": "Alt+W",
+        "hideWindow": "Alt+H"
+      }
+    },
+    "media-keys": {
+      "name": "Media Keys",
+      "description": "Uses media keys for recording control",
+      "hotkeys": {
+        "startRecording": "Media_Play",
+        "stopRecording": "Media_Stop",
+        "toggleRecording": "Media_Play_Pause",
+        "cancelRecording": "Escape",
+        "copyLastTranscription": "Ctrl+Shift+C"
+      }
+    },
+    "function-keys": {
+      "name": "Function Keys",
+      "description": "Uses function keys for all operations",
+      "hotkeys": {
+        "startRecording": "F5",
+        "stopRecording": "F6",
+        "toggleRecording": "F7",
+        "cancelRecording": "F8",
+        "copyLastTranscription": "F9",
+        "showWindow": "F10",
+        "hideWindow": "F11"
+      }
+    },
+    "accessibility": {
+      "name": "Accessibility",
+      "description": "Easy to reach single-key shortcuts",
+      "hotkeys": {
+        "startRecording": "F1",
+        "stopRecording": "F2",
+        "toggleRecording": "Space",
+        "cancelRecording": "Escape",
+        "copyLastTranscription": "F3",
+        "showWindow": "F4",
+        "hideWindow": "F5"
+      }
+    }
+  }
+}

@@ -1,0 +1,93 @@
+WhisperApp
+Copyright (c) 2025 WhisperApp Development Team
+
+This product includes software developed by the WhisperApp Development Team.
+
+=========================================================================
+Third-Party Software Notices and Attributions
+=========================================================================
+
+This software incorporates components from the following projects:
+
+1. Qt Framework (https://www.qt.io/)
+   - License: LGPLv3 / Commercial
+   - Copyright (c) The Qt Company Ltd.
+   - Used for: GUI framework and cross-platform functionality
+
+2. Whisper.cpp (https://github.com/ggerganov/whisper.cpp)
+   - License: MIT License
+   - Copyright (c) 2022 Georgi Gerganov
+   - Used for: Speech-to-text transcription engine
+
+3. OpenBLAS (https://www.openblas.net/)
+   - License: BSD 3-Clause License
+   - Copyright (c) 2011-2014, The OpenBLAS Project
+   - Used for: Optimized BLAS library for linear algebra operations
+
+4. JSON for Modern C++ (https://github.com/nlohmann/json)
+   - License: MIT License
+   - Copyright (c) 2013-2022 Niels Lohmann
+   - Used for: JSON parsing and serialization
+
+5. spdlog (https://github.com/gabime/spdlog)
+   - License: MIT License
+   - Copyright (c) 2016 Gabi Melman
+   - Used for: Fast C++ logging library
+
+6. OpenSSL (https://www.openssl.org/)
+   - License: Apache License 2.0
+   - Copyright (c) 1998-2023 The OpenSSL Project
+   - Used for: Cryptographic functions and SSL/TLS support
+
+7. zlib (https://zlib.net/)
+   - License: zlib License
+   - Copyright (c) 1995-2023 Jean-loup Gailly and Mark Adler
+   - Used for: Data compression
+
+8. libsndfile (http://www.mega-nerd.com/libsndfile/)
+   - License: LGPL v2.1 or v3
+   - Copyright (c) 1999-2023 Erik de Castro Lopo
+   - Used for: Audio file reading/writing
+
+9. PortAudio (http://www.portaudio.com/)
+   - License: MIT License
+   - Copyright (c) 1999-2023 Ross Bencina and Phil Burk
+   - Used for: Cross-platform audio I/O
+
+10. Google Material Design Icons (https://fonts.google.com/icons)
+    - License: Apache License 2.0
+    - Copyright (c) Google Inc.
+    - Used for: UI icons
+
+=========================================================================
+License Texts
+=========================================================================
+
+The full text of licenses for the above components can be found in the
+licenses/ subdirectory of this distribution or at the URLs provided above.
+
+=========================================================================
+Additional Acknowledgments
+=========================================================================
+
+Special thanks to:
+- The open-source community for their invaluable contributions
+- OpenAI for the Whisper model architecture
+- All contributors and testers who helped improve this software
+
+=========================================================================
+Compliance Notice
+=========================================================================
+
+This software complies with all licenses of incorporated third-party
+components. If you distribute this software, you must:
+
+1. Include this NOTICE file
+2. Comply with all third-party licenses
+3. Provide source code for LGPL components upon request
+4. Maintain all copyright notices
+
+For questions about licensing or compliance, please contact:
+legal@whisperapp.example.com
+
+=========================================================================

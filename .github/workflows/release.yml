@@ -1,0 +1,131 @@
+name: Release WhisperApp
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Setup Qt
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: '6.7.0'
+        host: 'windows'
+        target: 'desktop'
+        arch: 'win64_msvc2019_64'
+        modules: 'qtmultimedia qt5compat'
+        cache: true
+    
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+    
+    - name: Setup CMake
+      uses: jwlawson/actions-setup-cmake@v2
+      with:
+        cmake-version: '3.28.0'
+    
+    - name: Setup NSIS
+      run: |
+        choco install nsis -y
+        echo "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+    
+    - name: Cache Whisper models
+      uses: actions/cache@v4
+      with:
+        path: models/
+        key: whisper-models-v1
+    
+    - name: Download Whisper models
+      run: |
+        cd scripts
+        .\download-models.bat
+      shell: cmd
+    
+    - name: Build Release
+      run: |
+        cd scripts
+        .\build-release.bat
+      shell: cmd
+      env:
+        Qt6_DIR: ${{ env.Qt6_DIR }}
+    
+    - name: Build Portable Package
+      run: |
+        cd scripts
+        .\build-portable.bat
+      shell: cmd
+    
+    - name: Generate Checksums
+      run: |
+        cd scripts
+        .\generate-checksums.bat
+      shell: cmd
+    
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: whisperapp-windows
+        path: |
+          build/WhisperApp-*.exe
+          build/WhisperApp-*.zip
+          build/WhisperApp-*-SHA256.txt
+        retention-days: 7
+    
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref_name }}
+        release_name: WhisperApp ${{ github.ref_name }}
+        body_path: build/release-package/RELEASE_NOTES.md
+        draft: true
+        prerelease: false
+    
+    - name: Upload Installer
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: build/WhisperApp-${{ github.ref_name }}-Setup.exe
+        asset_name: WhisperApp-${{ github.ref_name }}-Setup.exe
+        asset_content_type: application/x-msdownload
+    
+    - name: Upload Portable ZIP
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: build/WhisperApp-${{ github.ref_name }}-portable-win64.zip
+        asset_name: WhisperApp-${{ github.ref_name }}-portable-win64.zip
+        asset_content_type: application/zip
+    
+    - name: Upload Checksums
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: build/WhisperApp-${{ github.ref_name }}-SHA256.txt
+        asset_name: WhisperApp-${{ github.ref_name }}-SHA256.txt
+        asset_content_type: text/plain

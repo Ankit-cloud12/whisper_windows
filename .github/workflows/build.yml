@@ -1,0 +1,134 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/**'
+      - '!.github/workflows/build.yml'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    strategy:
+      matrix:
+        build_type: [Debug, Release]
+        qt_version: ['6.7.0']
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Qt
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: ${{ matrix.qt_version }}
+        host: 'windows'
+        target: 'desktop'
+        arch: 'win64_msvc2019_64'
+        modules: 'qtmultimedia qt5compat'
+        cache: true
+    
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+    
+    - name: Setup CMake
+      uses: jwlawson/actions-setup-cmake@v2
+      with:
+        cmake-version: '3.28.0'
+    
+    - name: Cache build
+      uses: actions/cache@v4
+      with:
+        path: build/
+        key: ${{ runner.os }}-build-${{ matrix.build_type }}-${{ hashFiles('CMakeLists.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-build-${{ matrix.build_type }}-
+          ${{ runner.os }}-build-
+    
+    - name: Configure CMake
+      run: |
+        cmake -B build -G "Visual Studio 17 2022" -A x64 `
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
+          -DCMAKE_PREFIX_PATH=${{ env.Qt6_DIR }} `
+          -DBUILD_TESTS=ON
+    
+    - name: Build
+      run: cmake --build build --config ${{ matrix.build_type }} --parallel
+    
+    - name: Run Tests
+      run: |
+        cd build
+        ctest -C ${{ matrix.build_type }} --output-on-failure --verbose
+      continue-on-error: true
+    
+    - name: Upload Test Results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-${{ matrix.build_type }}
+        path: build/Testing/
+        retention-days: 7
+    
+    - name: Build Documentation
+      if: matrix.build_type == 'Release'
+      run: |
+        choco install doxygen.install -y
+        cd docs
+        doxygen Doxyfile
+      continue-on-error: true
+    
+    - name: Upload Build Artifacts
+      if: matrix.build_type == 'Release'
+      uses: actions/upload-artifact@v4
+      with:
+        name: whisperapp-build-${{ github.sha }}
+        path: |
+          build/Release/WhisperApp.exe
+          build/Release/*.dll
+        retention-days: 7
+
+  code-quality:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install cpplint
+      run: pip install cpplint
+    
+    - name: Run cpplint
+      run: |
+        cpplint --recursive --extensions=cpp,h --filter=-whitespace/line_length,-build/include_order src/
+      continue-on-error: true
+    
+    - name: Setup cppcheck
+      run: choco install cppcheck -y
+    
+    - name: Run cppcheck
+      run: |
+        cppcheck --enable=all --suppress=missingIncludeSystem --error-exitcode=1 `
+          --inline-suppr --xml --xml-version=2 src/ 2> cppcheck-report.xml
+      continue-on-error: true
+    
+    - name: Upload Code Quality Reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: code-quality-reports
+        path: |
+          cppcheck-report.xml
+        retention-days: 7

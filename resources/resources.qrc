@@ -1,0 +1,85 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+    <qresource prefix="/">
+        <!-- Application Icons -->
+        <file>icons/app.ico</file>
+        <file>icons/app.png</file>
+        <file>icons/app-16.png</file>
+        <file>icons/app-32.png</file>
+        <file>icons/app-64.png</file>
+        <file>icons/app-128.png</file>
+        <file>icons/app-256.png</file>
+        
+        <!-- Action Icons -->
+        <file>icons/record.png</file>
+        <file>icons/stop.png</file>
+        <file>icons/pause.png</file>
+        <file>icons/play.png</file>
+        <file>icons/settings.png</file>
+        <file>icons/help.png</file>
+        <file>icons/about.png</file>
+        <file>icons/exit.png</file>
+        
+        <!-- File Operation Icons -->
+        <file>icons/new.png</file>
+        <file>icons/open.png</file>
+        <file>icons/save.png</file>
+        <file>icons/save-as.png</file>
+        <file>icons/export.png</file>
+        
+        <!-- Edit Icons -->
+        <file>icons/cut.png</file>
+        <file>icons/copy.png</file>
+        <file>icons/paste.png</file>
+        <file>icons/undo.png</file>
+        <file>icons/redo.png</file>
+        <file>icons/find.png</file>
+        <file>icons/replace.png</file>
+        
+        <!-- View Icons -->
+        <file>icons/zoom-in.png</file>
+        <file>icons/zoom-out.png</file>
+        <file>icons/zoom-reset.png</file>
+        <file>icons/fullscreen.png</file>
+        
+        <!-- Status Icons -->
+        <file>icons/online.png</file>
+        <file>icons/offline.png</file>
+        <file>icons/downloading.png</file>
+        <file>icons/error.png</file>
+        <file>icons/warning.png</file>
+        <file>icons/info.png</file>
+        <file>icons/success.png</file>
+        
+        <!-- Device Icons -->
+        <file>icons/microphone.png</file>
+        <file>icons/speaker.png</file>
+        <file>icons/headphones.png</file>
+        
+        <!-- Model Icons -->
+        <file>icons/model.png</file>
+        <file>icons/download.png</file>
+        <file>icons/delete.png</file>
+        <file>icons/refresh.png</file>
+        
+        <!-- Language Flags -->
+        <file>icons/flag-us.png</file>
+        <file>icons/flag-es.png</file>
+        <file>icons/flag-fr.png</file>
+        <file>icons/flag-de.png</file>
+        <file>icons/flag-cn.png</file>
+        <file>icons/flag-jp.png</file>
+        
+        <!-- Stylesheets -->
+        <file>styles/default.qss</file>
+        <file>styles/dark.qss</file>
+        <file>styles/light.qss</file>
+        
+        <!-- Sounds -->
+        <file>sounds/start-recording.wav</file>
+        <file>sounds/stop-recording.wav</file>
+        <file>sounds/transcription-complete.wav</file>
+        <file>sounds/error.wav</file>
+        <file>sounds/notification.wav</file>
+    </qresource>
+</RCC>

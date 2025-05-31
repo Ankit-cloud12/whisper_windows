@@ -1,0 +1,182 @@
+# Build directories
+build/
+build-*/
+out/
+cmake-build-*/
+.vs/
+*.dir/
+
+# Qt related
+*.pro.user
+*.pro.user.*
+*.qbs.user
+*.qbs.user.*
+*.moc
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+*.qmlc
+*.jsc
+Makefile*
+*build-*
+*.qm
+*.prl
+
+# Qt Creator
+*.autosave
+*.qmlproject.user
+*.qmlproject.user.*
+CMakeLists.txt.user*
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.vcxproj.filters
+*.vcxproj.user
+*.VC.db
+*.VC.opendb
+ipch/
+*.aps
+*.ncb
+*.opensdf
+*.sdf
+*.cachefile
+*.psess
+*.vsp
+*.vspx
+
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Compiled files
+*.dll
+*.exe
+*.o
+*.so
+*.dylib
+*.lib
+*.a
+*.exp
+*.pdb
+*.ilk
+*.idb
+
+# Whisper models (large files)
+models/*.bin
+models/*.gguf
+!models/.gitkeep
+
+# User-specific files
+*.user
+*.userprefs
+*.suo
+*.cache
+*.log
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msm
+*.msp
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# IDE - VSCode
+.vscode/
+*.code-workspace
+
+# IDE - CLion
+.idea/
+cmake-build-*/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+venv/
+env/
+.env
+
+# Documentation
+docs/html/
+docs/latex/
+*.doxygen
+
+# Test results
+Testing/
+test-results/
+*.gcov
+*.gcda
+*.gcno
+coverage.info
+coverage/
+
+# Package files
+*.zip
+*.tar.gz
+*.rar
+*.7z
+!WhisperApp-*-portable-*.zip
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*~
+
+# Configuration overrides
+config/user-*.json
+settings/
+
+# Crash dumps
+*.dmp
+*.core
+
+# Certificates and keys
+*.pem
+*.key
+*.crt
+*.pfx
+*.p12
+
+# NSIS
+installer/*.exe
+!installer/installer.nsi
+
+# Generated checksums
+*.sha256
+*.md5
+!WhisperApp-*-SHA256.txt
+
+# Local environment
+.env.local
+.env.*.local
