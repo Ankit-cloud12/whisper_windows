@@ -17,13 +17,23 @@
 
 #include <QObject>
 #include <QString>
+#include <QDateTime>
+#include <QVariant>
+#include <QClipboard>
 #include <memory>
 #include <vector>
 #include <functional>
+#include <map>
+#include <utility>
 
 // Forward declarations
-class QClipboard;
 class QMimeData;
+
+// Windows-specific types needed for private methods
+// These are typically defined in <windows.h> but are added here
+// to avoid including the full windows.h in a Qt header.
+typedef unsigned short WORD;
+struct INPUT;
 
 /**
  * @brief Text insertion method
@@ -327,10 +337,7 @@ private:
     // State
     QString saved_clipboard_content;
     bool is_inserting = false;
-    
-    // Private implementation
-    class Impl;
-    std::unique_ptr<Impl> pImpl;
+    // NOTE: pImpl and Impl class forward declaration removed as per subtask.
 };
 
 #endif // CLIPBOARDMANAGER_H

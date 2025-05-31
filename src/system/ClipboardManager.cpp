@@ -6,6 +6,8 @@
 #include <QDateTime>
 #include <QRegularExpression>
 
+#include <windows.h> // For INPUT, WORD, SendInput, etc.
+
 ClipboardManager::ClipboardManager(QObject* parent)
     : QObject(parent)
     , m_clipboard(nullptr)
@@ -35,6 +37,21 @@ ClipboardManager::~ClipboardManager()
 {
     // TODO: Clean up resources
     // No explicit cleanup needed for clipboard
+}
+
+bool ClipboardManager::initialize()
+{
+    // TODO: Perform any necessary one-time setup
+    std::cout << "ClipboardManager::initialize() called" << std::endl;
+    // For now, just return true. Future implementations might do more.
+    return true;
+}
+
+void ClipboardManager::shutdown()
+{
+    // TODO: Perform any necessary cleanup before application exits
+    std::cout << "ClipboardManager::shutdown() called" << std::endl;
+    // Future implementations might disconnect signals or release resources.
 }
 
 void ClipboardManager::setText(const QString& text)
