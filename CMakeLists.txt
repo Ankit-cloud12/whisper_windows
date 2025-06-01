@@ -30,7 +30,16 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 # Add whisper.cpp as subdirectory (will be added when submodule is initialized)
-# add_subdirectory(third_party/whisper.cpp)
+# Check if whisper.cpp exists
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/whisper.cpp/CMakeLists.txt")
+    add_subdirectory(third_party/whisper.cpp)
+    set(WHISPER_AVAILABLE TRUE)
+    message(STATUS "Whisper.cpp found and will be built")
+else()
+    set(WHISPER_AVAILABLE FALSE)
+    message(WARNING "Whisper.cpp not found. Please initialize the submodule or download whisper.cpp")
+    message(STATUS "Building without whisper.cpp - transcription will be disabled")
+endif()
 
 # Include directories
 include_directories(
@@ -148,8 +157,13 @@ target_link_libraries(${PROJECT_NAME}
     Qt6::Network
     Threads::Threads
     ${PLATFORM_LIBS}
-    # whisper  # Will be linked when whisper.cpp is added
 )
+
+# Link whisper if available
+if(WHISPER_AVAILABLE)
+    target_link_libraries(${PROJECT_NAME} whisper)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE WHISPER_AVAILABLE)
+endif()
 
 # Compiler warnings
 if(MSVC)

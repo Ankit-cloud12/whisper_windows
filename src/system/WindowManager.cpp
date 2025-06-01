@@ -383,12 +383,52 @@ void WindowManager::saveGeometry(QWidget* widget, const QString& key)
 bool WindowManager::restoreGeometry(QWidget* widget, const QString& key)
 {
     if (!widget) return false;
-    
+
     QSettings settings;
     QByteArray geometry = settings.value(key + "/geometry").toByteArray();
     if (geometry.isEmpty()) return false;
-    
+
     return widget->restoreGeometry(geometry);
+}
+
+bool WindowManager::typeText(const std::wstring& text)
+{
+    if (text.empty()) return false;
+
+#ifdef _WIN32
+    // Get the currently active window
+    HWND activeWindow = GetForegroundWindow();
+    if (!activeWindow) return false;
+
+    // Convert wide string to input events
+    std::vector<INPUT> inputs;
+    inputs.reserve(text.length() * 2); // Each character needs key down and key up
+
+    for (wchar_t ch : text) {
+        INPUT input = {};
+        input.type = INPUT_KEYBOARD;
+        input.ki.wVk = 0;
+        input.ki.wScan = ch;
+        input.ki.dwFlags = KEYEVENTF_UNICODE;
+        input.ki.time = 0;
+        input.ki.dwExtraInfo = 0;
+
+        // Key down
+        inputs.push_back(input);
+
+        // Key up
+        input.ki.dwFlags |= KEYEVENTF_KEYUP;
+        inputs.push_back(input);
+    }
+
+    // Send the input events
+    UINT sent = SendInput(static_cast<UINT>(inputs.size()), inputs.data(), sizeof(INPUT));
+
+    return sent == inputs.size();
+#else
+    // Non-Windows platforms not supported
+    return false;
+#endif
 }
 
 // Static callbacks

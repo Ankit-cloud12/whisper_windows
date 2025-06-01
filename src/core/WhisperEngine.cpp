@@ -19,8 +19,13 @@
 #include <queue>
 #include <sstream>
 
-// TODO: Include this header when development environment is set up
-// #include "whisper.h"
+// Include whisper.cpp header if available
+#ifdef WHISPER_AVAILABLE
+#include "whisper.h"
+#else
+// Mock whisper types when not available
+typedef void* whisper_context;
+#endif
 
 /**
  * Private implementation class
@@ -179,20 +184,28 @@ bool WhisperEngine::loadModel(const std::string& model_path) {
         }
         
         LOG_INFO("WhisperEngine", "Loading model from: " + model_path);
-        
-        // TODO: Implement model loading with whisper.cpp
-        /*
+
+#ifdef WHISPER_AVAILABLE
+        // Real whisper.cpp implementation
         pImpl->ctx = whisper_init_from_file(model_path.c_str());
         if (!pImpl->ctx) {
             throw ModelException(ErrorCode::ModelLoadFailed,
                                "Failed to initialize whisper context");
         }
-        */
-        
-        // Mock implementation
+
         pImpl->model_path = model_path;
         pImpl->model_type = pImpl->detectModelType(model_path);
         pImpl->model_loaded = true;
+
+        LOG_INFO("WhisperEngine", "Whisper.cpp model loaded successfully");
+#else
+        // Mock implementation when whisper.cpp is not available
+        LOG_WARN("WhisperEngine", "Whisper.cpp not available - using mock implementation");
+
+        pImpl->model_path = model_path;
+        pImpl->model_type = pImpl->detectModelType(model_path);
+        pImpl->model_loaded = true;
+#endif
         
         // Simulate model memory size based on type
         std::map<std::string, size_t> model_sizes = {
@@ -219,15 +232,15 @@ bool WhisperEngine::loadModel(const std::string& model_path) {
 
 // Unload model
 void WhisperEngine::unloadModel() {
-    // TODO: Implement model unloading
-    /*
+#ifdef WHISPER_AVAILABLE
     if (pImpl->ctx) {
-        whisper_free(pImpl->ctx);
+        whisper_free(static_cast<whisper_context*>(pImpl->ctx));
         pImpl->ctx = nullptr;
     }
-    */
+#endif
     pImpl->model_loaded = false;
     pImpl->model_path.clear();
+    LOG_INFO("WhisperEngine", "Model unloaded");
 }
 
 // Check if model is loaded

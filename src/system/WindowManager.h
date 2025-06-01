@@ -235,6 +235,13 @@ public:
      */
     bool restoreGeometry(QWidget* widget, const QString& key);
 
+    /**
+     * @brief Type text into the active window
+     * @param text Text to type (wide string for Windows API)
+     * @return true if successful
+     */
+    bool typeText(const std::wstring& text);
+
 signals:
     /**
      * @brief Emitted when active window changes
