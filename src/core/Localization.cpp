@@ -1,123 +1,109 @@
 #include "Localization.h"
+#include "Logger.h"
+#include <QLocale>
+#include <QTranslator>
+#include <QCoreApplication>
 #include <QDir>
-#include <QApplication>
-#include <QDebug>
+#include <QFileInfo>
 
-namespace WhisperApp {
-
-void LocalizationManager::initialize() {
-    // Initialize language mappings
-    m_languageToLocaleMap = {
-        {Language::English, "en_US"},
-        {Language::Spanish, "es_ES"},
-        {Language::French, "fr_FR"},
-        {Language::German, "de_DE"},
-        {Language::Chinese, "zh_CN"},
-        {Language::Japanese, "ja_JP"},
-        {Language::Korean, "ko_KR"},
-        {Language::Russian, "ru_RU"},
-        {Language::Portuguese, "pt_BR"},
-        {Language::Italian, "it_IT"}
-    };
+class Localization::Impl {
+public:
+    QString currentLanguage;
+    std::map<QString, QString> translations;
+    std::map<QString, LanguageInfo> supportedLanguages;
+    QTranslator* translator = nullptr;
     
-    // Create reverse mapping
-    for (const auto& pair : m_languageToLocaleMap) {
-        m_localeToLanguageMap[pair.second] = pair.first;
-    }
-    
-    // Create translators
-    m_translator = std::make_unique<QTranslator>();
-    m_qtTranslator = std::make_unique<QTranslator>();
-    
-    // Install translators
-    QCoreApplication::installTranslator(m_translator.get());
-    QCoreApplication::installTranslator(m_qtTranslator.get());
-    
-    // Load system locale by default
-    QString systemLocale = QLocale::system().name();
-    if (!loadLanguage(systemLocale)) {
-        // Fall back to English if system locale not supported
-        loadLanguage(Language::English);
-    }
-}
-
-bool LocalizationManager::loadLanguage(Language language) {
-    QString locale = languageToLocale(language);
-    return loadLanguage(locale);
-}
-
-bool LocalizationManager::loadLanguage(const QString& locale) {
-    // Set current locale
-    m_currentLocale = QLocale(locale);
-    QLocale::setDefault(m_currentLocale);
-    
-    // Load application translations
-    QString translationPath = QApplication::applicationDirPath() + "/translations";
-    bool appLoaded = m_translator->load(QString("whisperapp_%1").arg(locale), translationPath);
-    
-    // Load Qt translations
-    bool qtLoaded = m_qtTranslator->load(QString("qt_%1").arg(locale), translationPath);
-    
-    if (appLoaded || locale == "en_US") {  // English is built-in
-        m_currentLanguage = localeToLanguage(locale);
-        emit languageChanged(m_currentLanguage);
-        return true;
-    }
-    
-    qWarning() << "Failed to load translations for locale:" << locale;
-    return false;
-}
-
-QList<QPair<LocalizationManager::Language, QString>> LocalizationManager::availableLanguages() const {
-    QList<QPair<Language, QString>> languages;
-    
-    for (const auto& pair : m_languageToLocaleMap) {
-        languages.append({pair.first, languageDisplayName(pair.first)});
-    }
-    
-    return languages;
-}
-
-QString LocalizationManager::languageDisplayName(Language language) const {
-    switch (language) {
-        case Language::English: return tr("English");
-        case Language::Spanish: return tr("Spanish");
-        case Language::French: return tr("French");
-        case Language::German: return tr("German");
-        case Language::Chinese: return tr("Chinese (Simplified)");
-        case Language::Japanese: return tr("Japanese");
-        case Language::Korean: return tr("Korean");
-        case Language::Russian: return tr("Russian");
-        case Language::Portuguese: return tr("Portuguese (Brazil)");
-        case Language::Italian: return tr("Italian");
-        default: return tr("Unknown");
-    }
-}
-
-QString LocalizationManager::languageToLocale(Language language) const {
-    auto it = m_languageToLocaleMap.find(language);
-    if (it != m_languageToLocaleMap.end()) {
-        return it->second;
-    }
-    return "en_US";  // Default to English
-}
-
-LocalizationManager::Language LocalizationManager::localeToLanguage(const QString& locale) const {
-    // Try exact match first
-    auto it = m_localeToLanguageMap.find(locale);
-    if (it != m_localeToLanguageMap.end()) {
-        return it->second;
-    }
-    
-    // Try language code only (e.g., "en" from "en_GB")
-    QString langCode = locale.left(2);
-    for (const auto& pair : m_localeToLanguageMap) {
-        if (pair.first.startsWith(langCode)) {
-            return pair.second;
+    Impl() {
+        // Initialize supported languages
+        supportedLanguages = {
+            {"en_US", {"en_US", "English", "English (US)", "🇺🇸"}},
+            {"es_ES", {"es_ES", "Español", "Spanish", "🇪🇸"}},
+            {"fr_FR", {"fr_FR", "Français", "French", "🇫🇷"}},
+            {"de_DE", {"de_DE", "Deutsch", "German", "🇩🇪"}},
+            {"zh_CN", {"zh_CN", "中文", "Chinese (Simplified)", "🇨🇳"}},
+            {"ja_JP", {"ja_JP", "日本語", "Japanese", "🇯🇵"}}
+        };
+        
+        // Set default language
+        currentLanguage = QLocale::system().name();
+        if (supportedLanguages.find(currentLanguage) == supportedLanguages.end()) {
+            currentLanguage = "en_US";
         }
     }
     
-    return Language::English;  // Default to English
+    ~Impl() {
+        if (translator) {
+            QCoreApplication::removeTranslator(translator);
+            delete translator;
+        }
+    }
+};
+
+Localization& Localization::instance() {
+    static Localization instance;
+    return instance;
 }
 
-} // namespace WhisperApp
+Localization::Localization() : pImpl(std::make_unique<Impl>()) {}
+Localization::~Localization() = default;
+
+bool Localization::loadLanguage(const QString& language) {
+    if (pImpl->supportedLanguages.find(language) == pImpl->supportedLanguages.end()) {
+        LOG_ERROR("Localization", "Unsupported language: " + language.toStdString());
+        return false;
+    }
+    
+    // Remove previous translator
+    if (pImpl->translator) {
+        QCoreApplication::removeTranslator(pImpl->translator);
+        delete pImpl->translator;
+    }
+    
+    // Load new translator
+    pImpl->translator = new QTranslator();
+    QString translationFile = QString(":/translations/whisperapp_%1").arg(language);
+    
+    if (pImpl->translator->load(translationFile)) {
+        QCoreApplication::installTranslator(pImpl->translator);
+        pImpl->currentLanguage = language;
+        LOG_INFO("Localization", "Loaded language: " + language.toStdString());
+        emit languageChanged(language);
+        return true;
+    } else {
+        LOG_WARN("Localization", "Failed to load translation file: " + translationFile.toStdString());
+        delete pImpl->translator;
+        pImpl->translator = nullptr;
+        return false;
+    }
+}
+
+QString Localization::getCurrentLanguage() const {
+    return pImpl->currentLanguage;
+}
+
+std::vector<LanguageInfo> Localization::getSupportedLanguages() const {
+    std::vector<LanguageInfo> result;
+    for (const auto& pair : pImpl->supportedLanguages) {
+        result.push_back(pair.second);
+    }
+    return result;
+}
+
+QString Localization::getLanguageName(const QString& code) const {
+    auto it = pImpl->supportedLanguages.find(code);
+    if (it != pImpl->supportedLanguages.end()) {
+        return it->second.nativeName;
+    }
+    return code;
+}
+
+QString Localization::translate(const QString& key, const QString& defaultValue) const {
+    // For now, just return the default value
+    // In a real implementation, this would look up the translation
+    return defaultValue.isEmpty() ? key : defaultValue;
+}
+
+// Convenience function for translation
+QString tr(const QString& key, const QString& defaultValue) {
+    return Localization::instance().translate(key, defaultValue);
+}

@@ -60,6 +60,8 @@ set(SOURCES
     src/core/Logger.cpp
     src/core/ModelManager.cpp
     src/core/Settings.cpp
+    src/core/Localization.cpp
+    src/core/UpdateChecker.cpp
     src/ui/AboutDialog.cpp
     src/ui/AudioLevelWidget.cpp
     src/ui/HotkeyEditWidget.cpp
@@ -79,6 +81,7 @@ set(SOURCES
 # Header files
 set(HEADERS
     src/core/WhisperEngine.h
+    src/core/WhisperStub.h
     src/core/AudioCapture.h
     src/core/AudioConverter.h
     src/core/AudioUtils.h
@@ -87,6 +90,8 @@ set(HEADERS
     src/core/ErrorCodes.h
     src/core/ModelManager.h
     src/core/Settings.h
+    src/core/Localization.h
+    src/core/UpdateChecker.h
     src/ui/AboutDialog.h
     src/ui/AudioLevelWidget.h
     src/ui/HotkeyEditWidget.h

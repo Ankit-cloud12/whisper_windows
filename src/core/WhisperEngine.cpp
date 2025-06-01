@@ -23,8 +23,9 @@
 #ifdef WHISPER_AVAILABLE
 #include "whisper.h"
 #else
-// Mock whisper types when not available
-typedef void* whisper_context;
+// Use stub implementation when whisper.cpp is not available
+#include "WhisperStub.h"
+using namespace whisper;
 #endif
 
 /**
