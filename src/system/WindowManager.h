@@ -20,6 +20,7 @@
 #include <QString>
 #include <memory>
 #include <vector>
+#include <string>
 
 // Windows types
 #ifdef _WIN32

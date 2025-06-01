@@ -39,7 +39,6 @@ const QString ORGANIZATION_DOMAIN = "whisperapp.com";
 // Application context for global access
 struct AppContext {
     std::unique_ptr<Settings> settings;
-    std::unique_ptr<Logger> logger;
     std::unique_ptr<WhisperEngine> whisperEngine;
     std::unique_ptr<AudioCapture> audioCapture;
     std::unique_ptr<DeviceManager> deviceManager;
@@ -129,12 +128,16 @@ int main(int argc, char *argv[])
         
         // Initialize logger
         QString logPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/logs";
-        context.logger = std::make_unique<Logger>(logPath.toStdString());
-        context.logger->setLevel(static_cast<Logger::Level>(
-            context.settings->value("General/LogLevel", 
-            static_cast<int>(Logger::Level::Info)).toInt()));
-        
-        context.logger->info("WhisperApp starting up...");
+        LoggerConfig logConfig;
+        logConfig.logDirectory = logPath.toStdString();
+        logConfig.enableConsole = true;
+        logConfig.enableFile = true;
+        logConfig.consoleLevel = static_cast<LogLevel>(
+            context.settings->value("General/LogLevel",
+            static_cast<int>(LogLevel::INFO)).toInt());
+
+        Logger::getInstance().initialize(logConfig);
+        Logger::getInstance().info("WhisperApp", "WhisperApp starting up...");
         
         // Initialize core components
         context.deviceManager = std::make_unique<DeviceManager>();
@@ -180,13 +183,13 @@ int main(int argc, char *argv[])
         // Recording control
         QObject::connect(context.mainWindow.get(), &MainWindow::recordingStarted,
                         [&context]() {
-            context.logger->info("Recording started");
+            Logger::getInstance().info("WhisperApp", "Recording started");
             context.audioCapture->startCapture();
         });
         
         QObject::connect(context.mainWindow.get(), &MainWindow::recordingStopped,
                         [&context]() {
-            context.logger->info("Recording stopped");
+            Logger::getInstance().info("WhisperApp", "Recording stopped");
             context.audioCapture->stopCapture();
             
             // Get audio data and transcribe
@@ -233,7 +236,7 @@ int main(int argc, char *argv[])
                     }
                 );
             } else {
-                context.logger->warn("No audio data captured");
+                Logger::getInstance().warn("WhisperApp", "No audio data captured");
                 QMetaObject::invokeMethod(context.mainWindow.get(),
                     "onTranscriptionError",
                     Qt::QueuedConnection,
@@ -307,9 +310,9 @@ int main(int argc, char *argv[])
         QObject::connect(context.mainWindow.get(), &MainWindow::settingsChanged,
                         [&context]() {
             // Reload settings
-            context.logger->setLevel(static_cast<Logger::Level>(
-                context.settings->value("General/LogLevel", 
-                static_cast<int>(Logger::Level::Info)).toInt()));
+            Logger::getInstance().setConsoleLevel(static_cast<LogLevel>(
+                context.settings->value("General/LogLevel",
+                static_cast<int>(LogLevel::INFO)).toInt()));
             
             // Update audio device
             QString deviceId = context.settings->value("Audio/InputDevice", "").toString();
@@ -356,7 +359,7 @@ int main(int argc, char *argv[])
         int result = app.exec();
         
         // Cleanup
-        context.logger->info("WhisperApp shutting down...");
+        Logger::getInstance().info("WhisperApp", "WhisperApp shutting down...");
         context.globalHotkeys->unregisterAll();
         
         return result;

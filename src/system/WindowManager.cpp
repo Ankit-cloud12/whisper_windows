@@ -5,6 +5,17 @@
 #include <QSettings>
 #include <QDebug>
 
+// Standard library includes
+#include <memory>
+#include <vector>
+#include <string>
+
+// Windows API includes
+#ifdef _WIN32
+#include <windows.h>
+#include <winuser.h>
+#endif
+
 // Private implementation class
 class WindowManager::Impl {
 public:
