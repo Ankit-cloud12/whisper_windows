@@ -4,6 +4,14 @@ A high-performance, production-ready Windows speech-to-text application using wh
 
 ## Overview
 
+> **⚠️ IMPORTANT: Demo Version Notice**
+> This repository currently contains a demonstration version of WhisperApp. The actual speech recognition functionality requires the whisper.cpp library to be properly integrated. The current build uses stub implementations for the Whisper functionality, allowing the application to build and run with full UI features but without actual transcription capabilities.
+>
+> To enable full functionality:
+> 1. Clone whisper.cpp into `third_party/whisper.cpp`
+> 2. Build with whisper.cpp integration enabled
+> 3. Download the required Whisper models
+
 WhisperApp provides real-time speech-to-text transcription on Windows using OpenAI's Whisper model through the whisper.cpp implementation. The application features:
 
 ### Core Features
