@@ -1,0 +1,10 @@
+Triggering GitHub Actions workflow at: 2025-06-02T14:41:00Z
+
+This file is created to trigger the GitHub Actions build workflow.
+The workflow will:
+1. Build WhisperApp in both Debug and Release modes
+2. Run tests
+3. Generate build artifacts
+4. Upload the WhisperApp.exe and DLLs
+
+Monitor progress at: https://github.com/Ankit-cloud12/whisper_windows/actions
