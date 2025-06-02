@@ -1,0 +1,40 @@
+name: Manual Build Trigger
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'Release'
+        type: choice
+        options:
+        - Release
+        - Debug
+      deploy_artifacts:
+        description: 'Deploy build artifacts'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  trigger-build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Trigger Build Workflow
+      uses: actions/github-script@v7
+      with:
+        script: |
+          await github.rest.actions.createWorkflowDispatch({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            workflow_id: 'build.yml',
+            ref: 'main'
+          });
+          console.log('Build workflow triggered successfully!');
+    
+    - name: Wait and Check Status
+      run: |
+        echo "Build workflow has been triggered!"
+        echo "Check the Actions tab to monitor progress:"
+        echo "https://github.com/Ankit-cloud12/whisper_windows/actions"
