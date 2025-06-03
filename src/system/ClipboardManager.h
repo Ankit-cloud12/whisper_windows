@@ -17,13 +17,23 @@
 
 #include <QObject>
 #include <QString>
+#include <QDateTime>
+#include <QVariant>
+#include <QClipboard>
 #include <memory>
 #include <vector>
 #include <functional>
+#include <map>
+#include <utility>
 
 // Forward declarations
-class QClipboard;
 class QMimeData;
+
+// Windows-specific types needed for private methods
+// These are typically defined in <windows.h> but are added here
+// to avoid including the full windows.h in a Qt header.
+typedef unsigned short WORD;
+struct INPUT;
 
 /**
  * @brief Text insertion method
@@ -203,11 +213,32 @@ public:
      */
     bool setClipboardData(const QMimeData* mime_data);
 
+    // New public methods
+    void setText(const QString& text);
+    QString text() const;
+    void clear();
+    // bool hasText() const; // Already exists
+    void appendText(const QString& text);
+    void setRichText(const QString& html);
+    QString richText() const;
+    QStringList formats() const;
+    void copyWithTimestamp(const QString& text);
+    void copyAsMarkdown(const QString& text);
+    bool supportsSelection() const;
+    void setSelectionText(const QString& text);
+    QString selectionText() const;
+
 signals:
     /**
      * @brief Emitted when clipboard content changes
+     * @param text The new clipboard text
      */
-    void clipboardChanged();
+    void clipboardChanged(const QString& text);
+
+    /**
+     * @brief Emitted when the clipboard is cleared
+     */
+    void clipboardCleared();
 
     /**
      * @brief Emitted when text is copied
@@ -282,9 +313,16 @@ private:
      */
     InsertionMethod determineBestMethod(const QString& text) const;
 
+    /**
+     * @brief Strip HTML tags from HTML string
+     * @param html HTML string
+     * @return Plain text string
+     */
+    QString stripHtml(const QString& html) const;
+
 private:
     // Qt clipboard
-    QClipboard* clipboard = nullptr;
+    QClipboard* m_clipboard = nullptr;
     
     // Settings
     InsertionMethod default_method = InsertionMethod::Auto;
@@ -299,10 +337,7 @@ private:
     // State
     QString saved_clipboard_content;
     bool is_inserting = false;
-    
-    // Private implementation
-    class Impl;
-    std::unique_ptr<Impl> pImpl;
+    // NOTE: pImpl and Impl class forward declaration removed as per subtask.
 };
 
 #endif // CLIPBOARDMANAGER_H

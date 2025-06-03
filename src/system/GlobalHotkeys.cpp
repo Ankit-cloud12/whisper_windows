@@ -1,6 +1,7 @@
 #include "GlobalHotkeys.h"
 #include <iostream>
 #include <windows.h>
+#include <QCoreApplication> // For qApp
 
 GlobalHotkeys::GlobalHotkeys(QObject* parent)
     : QObject(parent)
@@ -10,6 +11,13 @@ GlobalHotkeys::GlobalHotkeys(QObject* parent)
     // - Set up Windows hook or register hotkeys
     // - Initialize hotkey mapping
     
+    if (qApp) { // Ensure qApp is valid before using
+        qApp->installNativeEventFilter(this);
+    } else {
+        std::cerr << "GlobalHotkeys: Error - QApplication instance not available, cannot install native event filter." << std::endl;
+        // Consider how to handle this error, e.g., throw or set an error state.
+    }
+
     std::cout << "GlobalHotkeys: Initialized" << std::endl;
 }
 
@@ -62,7 +70,7 @@ bool GlobalHotkeys::registerHotkey(const QString& id, const QString& combination
     info.modifiers = modifiers;
     info.key = key;
     
-    m_hotkeys[id] = info;
+    this->m_hotkeys[id] = info; // Changed to this->m_hotkeys for clarity
     
     return true;
 }
@@ -74,8 +82,8 @@ bool GlobalHotkeys::unregisterHotkey(const QString& id)
     // - Unregister from Windows
     // - Remove from mapping
     
-    auto it = m_hotkeys.find(id);
-    if (it == m_hotkeys.end()) {
+    auto it = this->m_hotkeys.find(id); // Changed to this->m_hotkeys
+    if (it == this->m_hotkeys.end()) { // Changed to this->m_hotkeys
         return false;
     }
     
@@ -84,7 +92,7 @@ bool GlobalHotkeys::unregisterHotkey(const QString& id)
     // TODO: Actually unregister from Windows
     // UnregisterHotKey(NULL, it->second.windowsId);
     
-    m_hotkeys.erase(it);
+    this->m_hotkeys.erase(it); // Changed to this->m_hotkeys
     return true;
 }
 
@@ -96,12 +104,12 @@ void GlobalHotkeys::unregisterAllHotkeys()
     
     std::cout << "GlobalHotkeys: Unregistering all hotkeys" << std::endl;
     
-    for (const auto& pair : m_hotkeys) {
+    for (const auto& pair : this->m_hotkeys) { // Changed to this->m_hotkeys
         // TODO: Actually unregister from Windows
         // UnregisterHotKey(NULL, pair.second.windowsId);
     }
     
-    m_hotkeys.clear();
+    this->m_hotkeys.clear(); // Changed to this->m_hotkeys
 }
 
 bool GlobalHotkeys::isHotkeyRegistered(const QString& id) const
@@ -109,7 +117,7 @@ bool GlobalHotkeys::isHotkeyRegistered(const QString& id) const
     // TODO: Check if hotkey is registered
     // - Look up in mapping
     
-    return m_hotkeys.find(id) != m_hotkeys.end();
+    return this->m_hotkeys.find(id) != this->m_hotkeys.end(); // Changed to this->m_hotkeys
 }
 
 QString GlobalHotkeys::getHotkeyCombination(const QString& id) const
@@ -118,8 +126,8 @@ QString GlobalHotkeys::getHotkeyCombination(const QString& id) const
     // - Look up in mapping
     // - Return combination string
     
-    auto it = m_hotkeys.find(id);
-    if (it != m_hotkeys.end()) {
+    auto it = this->m_hotkeys.find(id); // Changed to this->m_hotkeys
+    if (it != this->m_hotkeys.end()) { // Changed to this->m_hotkeys
         return it->second.combination;
     }
     
@@ -132,7 +140,7 @@ QStringList GlobalHotkeys::registeredHotkeys() const
     // - Return all registered IDs
     
     QStringList ids;
-    for (const auto& pair : m_hotkeys) {
+    for (const auto& pair : this->m_hotkeys) { // Changed to this->m_hotkeys
         ids << pair.first;
     }
     
@@ -238,7 +246,7 @@ void GlobalHotkeys::handleHotkeyEvent(int windowsHotkeyId)
     // - Find hotkey by Windows ID
     // - Emit appropriate signal
     
-    for (const auto& pair : m_hotkeys) {
+    for (const auto& pair : this->m_hotkeys) { // Changed to this->m_hotkeys
         if (pair.second.windowsId == windowsHotkeyId) {
             std::cout << "GlobalHotkeys: Hotkey triggered - ID: " << pair.first.toStdString() << std::endl;
             emit hotkeyTriggered(pair.first);
@@ -247,7 +255,7 @@ void GlobalHotkeys::handleHotkeyEvent(int windowsHotkeyId)
     }
 }
 
-bool GlobalHotkeys::nativeEventFilter(const QByteArray& eventType, void* message, qintptr* result)
+bool GlobalHotkeys::nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result)
 {
     // TODO: Process Windows messages for hotkeys
     // - Check for WM_HOTKEY message
