@@ -14,11 +14,11 @@ This document provides step-by-step instructions for building WhisperApp on Wind
    - Download from: https://cmake.org/download/
    - Add to system PATH during installation
 
-3. **Qt 6.7.0 or later**
+3. **Qt 6.9.1 or later**
    - Download from: https://www.qt.io/download-qt-installer
    - Install the following components:
-     - Qt 6.7.0 → MSVC 2019 64-bit
-     - Qt 6.7.0 → Sources (optional, for debugging)
+     - Qt 6.9.1 → MSVC 2019 64-bit
+     - Qt 6.9.1 → Sources (optional, for debugging)
      - Developer and Designer Tools → CMake
      - Developer and Designer Tools → Ninja
 
@@ -59,7 +59,7 @@ This document provides step-by-step instructions for building WhisperApp on Wind
 
 3. **Set environment variables:**
    ```cmd
-   set QT_DIR=C:\Qt\6.7.0\msvc2019_64
+   set QT_DIR=C:\Qt\6.9.1\msvc2019_64
    set PATH=%QT_DIR%\bin;%PATH%
    ```
 
@@ -107,7 +107,7 @@ cd build
 # Configure with CMake
 cmake -G "Visual Studio 17 2022" -A x64 ^
     -DCMAKE_BUILD_TYPE=Release ^
-    -DCMAKE_PREFIX_PATH=C:\Qt\6.7.0\msvc2019_64 ^
+    -DCMAKE_PREFIX_PATH=C:\Qt\6.9.1\msvc2019_64 ^
     ..
 
 # Build
@@ -127,7 +127,7 @@ cmake --build . --config Release --parallel
 ```cmd
 cmake -G "Visual Studio 17 2022" -A x64 ^
     -DCMAKE_BUILD_TYPE=Release ^
-    -DCMAKE_PREFIX_PATH=C:\Qt\6.7.0\msvc2019_64 ^
+    -DCMAKE_PREFIX_PATH=C:\Qt\6.9.1\msvc2019_64 ^
     -DBUILD_TESTS=ON ^
     -DBUILD_INSTALLER=ON ^
     ..

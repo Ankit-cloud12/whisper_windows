@@ -24,7 +24,7 @@ jobs:
     - name: Setup Qt
       uses: jurplel/install-qt-action@v3
       with:
-        version: '6.7.0'
+        version: '6.9.1'
         host: 'windows'
         target: 'desktop'
         arch: 'win64_msvc2019_64'
@@ -39,11 +39,11 @@ jobs:
     - name: Setup CMake
       uses: jwlawson/actions-setup-cmake@v2
       with:
-        cmake-version: '3.28.0'
+        cmake-version: '3.31.7'
     
     - name: Setup NSIS
       run: |
-        choco install nsis -y
+        choco install nsis --version 3.11 -y
         echo "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
     
     - name: Cache Whisper models
