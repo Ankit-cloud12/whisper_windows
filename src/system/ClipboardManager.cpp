@@ -1,3 +1,4 @@
+#define WIN32_LEAN_AND_MEAN // Must be defined before windows.h
 #include "ClipboardManager.h"
 #include <iostream>
 #include <QClipboard>
