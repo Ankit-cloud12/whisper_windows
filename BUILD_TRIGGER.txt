@@ -1,0 +1,1 @@
+Build trigger after fixing LOG_* macro compilation errors
