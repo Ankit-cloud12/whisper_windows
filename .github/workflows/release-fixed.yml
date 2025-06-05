@@ -1,0 +1,216 @@
+name: Fixed Release WhisperApp
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build release for'
+        required: true
+        default: 'v1.0.0'
+
+env:
+  QT_VERSION: '6.6.3'
+
+jobs:
+  build-release:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Get version from tag
+      id: version
+      shell: bash
+      run: |
+        VERSION="${{ github.event.inputs.tag }}"
+        VERSION_NO_V=${VERSION#v}
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "version_no_v=${VERSION_NO_V}" >> $GITHUB_OUTPUT
+        echo "${VERSION_NO_V}" > VERSION
+    
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+    
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        version: ${{ env.QT_VERSION }}
+        host: windows
+        target: desktop
+        arch: win64_msvc2019_64
+        modules: 'qtmultimedia qtnetwork'
+        cache: true
+        setup-python: false
+    
+    - name: Install NSIS via Chocolatey
+      run: |
+        choco install nsis -y
+        refreshenv
+        echo "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+    
+    - name: Download Visual C++ Redistributable
+      run: |
+        New-Item -ItemType Directory -Force -Path installer
+        Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "installer/vc_redist.x64.exe"
+    
+    - name: Create build directory
+      run: |
+        New-Item -ItemType Directory -Force -Path build
+    
+    - name: Configure CMake
+      run: |
+        cmake -B build -G "Visual Studio 17 2022" -A x64 `
+          -DCMAKE_BUILD_TYPE=Release `
+          -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" `
+          -DBUILD_TESTS=OFF
+    
+    - name: Build Release
+      run: |
+        cmake --build build --config Release --parallel
+    
+    - name: Prepare distribution directory
+      run: |
+        New-Item -ItemType Directory -Force -Path build/dist
+        Copy-Item build/Release/WhisperApp.exe build/dist/
+    
+    - name: Deploy Qt dependencies
+      run: |
+        cd build/dist
+        & "${{ env.Qt6_DIR }}/bin/windeployqt.exe" --release --no-translations --no-system-d3d-compiler --no-opengl-sw WhisperApp.exe
+    
+    - name: Copy resources and documentation
+      run: |
+        robocopy resources build\dist\resources /E /NP /NFL /NDL
+        robocopy config build\dist\config /E /NP /NFL /NDL
+        Copy-Item README.md build/dist/
+        Copy-Item LICENSE build/dist/
+        Copy-Item CHANGELOG.md build/dist/
+        Copy-Item USER_GUIDE.md build/dist/
+        exit 0  # robocopy returns non-zero on success
+    
+    - name: Create models directory
+      run: |
+        New-Item -ItemType Directory -Force -Path build/dist/models
+        "# Models directory - download models using the application" | Out-File -FilePath build/dist/models/README.txt
+    
+    - name: Update NSIS script with version
+      run: |
+        $content = Get-Content installer/installer.nsi -Raw
+        $content = $content -replace '!define PRODUCT_VERSION ".*"', '!define PRODUCT_VERSION "${{ steps.version.outputs.version_no_v }}"'
+        $content = $content -replace 'OutFile ".*"', 'OutFile "..\build\WhisperApp-${{ steps.version.outputs.version_no_v }}-Setup.exe"'
+        $content | Set-Content installer/installer_build.nsi -Encoding UTF8
+    
+    - name: Build NSIS Installer
+      run: |
+        cd installer
+        makensis installer_build.nsi
+        if (-not (Test-Path "..\build\WhisperApp-${{ steps.version.outputs.version_no_v }}-Setup.exe")) {
+          throw "Installer was not created"
+        }
+    
+    - name: Create portable package
+      run: |
+        cd build
+        Compress-Archive -Path dist\* -DestinationPath WhisperApp-${{ steps.version.outputs.version_no_v }}-portable-win64.zip -Force
+    
+    - name: Generate checksums
+      run: |
+        cd build
+        $installerHash = (Get-FileHash -Algorithm SHA256 "WhisperApp-${{ steps.version.outputs.version_no_v }}-Setup.exe").Hash
+        $portableHash = (Get-FileHash -Algorithm SHA256 "WhisperApp-${{ steps.version.outputs.version_no_v }}-portable-win64.zip").Hash
+        $installerHash | Set-Content "WhisperApp-${{ steps.version.outputs.version_no_v }}-Setup.exe.sha256"
+        $portableHash | Set-Content "WhisperApp-${{ steps.version.outputs.version_no_v }}-portable-win64.zip.sha256"
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: WhisperApp-${{ steps.version.outputs.version_no_v }}-build-artifacts
+        path: |
+          build/WhisperApp-${{ steps.version.outputs.version_no_v }}-Setup.exe
+          build/WhisperApp-${{ steps.version.outputs.version_no_v }}-portable-win64.zip
+          build/*.sha256
+        retention-days: 30
+    
+    - name: Create Release Notes
+      id: release_notes
+      run: |
+        $VERSION = "${{ steps.version.outputs.version_no_v }}"
+        $NOTES = @"
+        # WhisperApp v$VERSION
+        
+        ## Downloads
+        
+        ### Installer (Recommended)
+        - **WhisperApp-$VERSION-Setup.exe** - Full installer with all dependencies
+        
+        ### Portable Version
+        - **WhisperApp-$VERSION-portable-win64.zip** - Portable version (extract and run)
+        
+        ## Installation
+        
+        ### Using the Installer
+        1. Download WhisperApp-$VERSION-Setup.exe
+        2. Run the installer as administrator
+        3. Follow the installation wizard
+        4. Launch WhisperApp from Start Menu or Desktop shortcut
+        
+        ### Using Portable Version
+        1. Download WhisperApp-$VERSION-portable-win64.zip
+        2. Extract to your preferred location
+        3. Run WhisperApp.exe
+        
+        ## What's New in v$VERSION
+        
+        - Initial release of WhisperApp
+        - Real-time speech-to-text transcription
+        - Multiple language support
+        - Configurable hotkeys
+        - Audio device management
+        - Export transcriptions in multiple formats
+        - Dark/Light theme support
+        
+        ## System Requirements
+        
+        - Windows 10/11 (64-bit)
+        - 4GB RAM minimum, 8GB recommended
+        - Audio input device (microphone)
+        - Internet connection for model downloads
+        
+        ## Verification
+        
+        SHA256 checksums are provided for all downloads.
+        
+        ## Support
+        
+        - 📖 [User Guide](https://github.com/whisperapp/whisperapp/blob/main/USER_GUIDE.md)
+        - 🐛 [Report Issues](https://github.com/whisperapp/whisperapp/issues)
+        
+        ---
+        
+        **Note**: This application uses OpenAI's Whisper model for speech recognition.
+        The first launch will download the required AI models (~150MB).
+        "@
+        
+        $NOTES | Out-File -FilePath release_notes.md -Encoding UTF8
+        echo "notes_file=release_notes.md" >> $env:GITHUB_OUTPUT
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.version.outputs.version }}
+        name: WhisperApp ${{ steps.version.outputs.version }}
+        body_path: ${{ steps.release_notes.outputs.notes_file }}
+        draft: false
+        prerelease: false
+        files: |
+          build/WhisperApp-${{ steps.version.outputs.version_no_v }}-Setup.exe
+          build/WhisperApp-${{ steps.version.outputs.version_no_v }}-portable-win64.zip
+          build/WhisperApp-${{ steps.version.outputs.version_no_v }}-Setup.exe.sha256
+          build/WhisperApp-${{ steps.version.outputs.version_no_v }}-portable-win64.zip.sha256
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
