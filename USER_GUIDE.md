@@ -221,12 +221,12 @@ Edit `config/export-templates.json` to create custom formats
 
 #### Batch Processing
 Process multiple audio files:
-```
+```cmd
 WhisperApp.exe --batch --input "C:\AudioFiles" --output "C:\Transcripts"
 ```
 
 #### Command Line Usage
-```
+```cmd
 WhisperApp.exe [options]
   --model <name>     Use specific model
   --language <code>  Set language (en, es, fr, etc.)

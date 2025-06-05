@@ -9,6 +9,7 @@ class TranscriptionWidget;
 class AudioLevelWidget;
 class StatusBarWidget;
 class TranscriptionHistoryWidget;
+class ModelManager;
 class QAction;
 class QMenu;
 class QToolBar;
@@ -318,6 +319,9 @@ private:
     QAction* m_helpAction;
     QAction* m_aboutAction;
     QAction* m_aboutQtAction;
+    
+    // Core components
+    ModelManager* m_modelManager;
     
     // State
     bool m_recording;

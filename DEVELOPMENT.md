@@ -24,12 +24,12 @@ This document provides guidelines for developers working on the WhisperApp proje
 ### First-Time Setup
 
 1. Run the development environment setup script:
-   ```bash
+   ```cmd
    scripts\setup-dev-env.bat
    ```
 
 2. Configure Git:
-   ```bash
+   ```cmd
    git config core.autocrlf true
    git config user.name "Your Name"
    git config user.email "your.email@example.com"
@@ -77,7 +77,7 @@ private:
 
 ### Debug Build
 
-```bash
+```cmd
 mkdir build-debug
 cd build-debug
 cmake .. -DCMAKE_BUILD_TYPE=Debug
@@ -86,7 +86,7 @@ cmake --build . --config Debug
 
 ### Release Build
 
-```bash
+```cmd
 mkdir build-release
 cd build-release
 cmake .. -DCMAKE_BUILD_TYPE=Release
@@ -95,7 +95,7 @@ cmake --build . --config Release
 
 ### Running Tests
 
-```bash
+```cmd
 cd build-debug
 ctest -C Debug --output-on-failure
 ```

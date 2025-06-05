@@ -57,7 +57,7 @@ WhisperApp provides real-time speech-to-text transcription on Windows using Open
 
 ## Project Structure
 
-```
+```tree
 WhisperApp/
 ├── src/
 │   ├── core/           # Core functionality
@@ -81,28 +81,29 @@ WhisperApp/
 ## Building from Source
 
 1. Clone the repository with submodules:
-   ```bash
+   ```cmd
    git clone --recursive https://github.com/yourusername/WhisperApp.git
    cd WhisperApp
    ```
 
 2. Initialize third-party dependencies:
-   ```bash
+   ```cmd
    git submodule update --init --recursive
    ```
 
 3. Create build directory:
-   ```bash
-   mkdir build && cd build
+   ```cmd
+   mkdir build
+   cd build
    ```
 
 4. Configure with CMake:
-   ```bash
+   ```cmd
    cmake .. -DCMAKE_BUILD_TYPE=Release
    ```
 
 5. Build the project:
-   ```bash
+   ```cmd
    cmake --build . --config Release
    ```
 
@@ -119,19 +120,19 @@ WhisperApp/
 ### For Developers
 
 Run the setup script to prepare your development environment:
-```bash
+```cmd
 scripts\setup-dev-env.bat
 ```
 
 Generate application icons:
-```bash
+```cmd
 scripts\generate-icons.bat
 ```
 
 ## Model Management
 
 Download Whisper models using the provided script:
-```bash
+```cmd
 scripts\download-models.bat
 ```
 
@@ -253,7 +254,7 @@ Logs location: `%APPDATA%\WhisperApp\logs\`
 ## Testing
 
 Run the test suite:
-```bash
+```cmd
 scripts\run-tests.bat
 ```
 

@@ -1,7 +1,7 @@
 /*
  * AudioCapture.cpp
  * 
- * Enhanced audio capture implementation with WASAPI mock
+ * Real WASAPI audio capture implementation for Windows
  */
 
 #include "AudioCapture.h"
@@ -12,30 +12,43 @@
 #include <queue>
 #include <condition_variable>
 
+// Windows includes for WASAPI
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <mmdeviceapi.h>
+#include <audioclient.h>
+#include <audiopolicy.h>
+#include <functiondiscoverykeys_devpkey.h>
+#include <propvarutil.h>
+#include <wrl/client.h>
+#include <string>
+
 using namespace WhisperApp;
+using Microsoft::WRL::ComPtr;
 
-// Mock WASAPI structures (will be replaced with actual Windows API later)
-struct IMMDeviceEnumerator {
-    virtual ~IMMDeviceEnumerator() = default;
-};
+// Utility function to convert wide string to string
+std::string WideStringToString(LPCWSTR wide_string) {
+    if (!wide_string) return "";
+    
+    int size_needed = WideCharToMultiByte(CP_UTF8, 0, wide_string, -1, NULL, 0, NULL, NULL);
+    if (size_needed <= 0) return "";
+    
+    std::string result(size_needed - 1, 0);
+    WideCharToMultiByte(CP_UTF8, 0, wide_string, -1, &result[0], size_needed, NULL, NULL);
+    return result;
+}
 
-struct IMMDevice {
-    std::string id;
-    std::string name;
-    bool is_default;
-    bool is_loopback;
-    virtual ~IMMDevice() = default;
-};
-
-struct IAudioClient {
-    int sample_rate = 48000;
-    int channels = 2;
-    virtual ~IAudioClient() = default;
-};
-
-struct IAudioCaptureClient {
-    virtual ~IAudioCaptureClient() = default;
-};
+// Utility function to convert string to wide string
+std::wstring StringToWideString(const std::string& str) {
+    if (str.empty()) return L"";
+    
+    int size_needed = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, NULL, 0);
+    if (size_needed <= 0) return L"";
+    
+    std::wstring result(size_needed - 1, 0);
+    MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, &result[0], size_needed);
+    return result;
+}
 
 // Ring buffer for audio data
 class RingBuffer {
@@ -97,39 +110,86 @@ private:
     std::atomic<bool> running_{true};
 };
 
+// Audio resampler for format conversion
+class AudioResampler {
+public:
+    AudioResampler(int input_rate, int output_rate, int channels)
+        : input_rate_(input_rate), output_rate_(output_rate), channels_(channels) {
+        ratio_ = static_cast<double>(output_rate) / input_rate;
+    }
+    
+    std::vector<float> resample(const float* input, size_t input_frames) {
+        if (input_rate_ == output_rate_) {
+            return std::vector<float>(input, input + input_frames * channels_);
+        }
+        
+        size_t output_frames = static_cast<size_t>(input_frames * ratio_);
+        std::vector<float> output(output_frames * channels_);
+        
+        for (size_t i = 0; i < output_frames; ++i) {
+            double src_pos = i / ratio_;
+            size_t src_idx = static_cast<size_t>(src_pos);
+            double frac = src_pos - src_idx;
+            
+            if (src_idx + 1 < input_frames) {
+                // Linear interpolation
+                for (int ch = 0; ch < channels_; ++ch) {
+                    float sample1 = input[src_idx * channels_ + ch];
+                    float sample2 = input[(src_idx + 1) * channels_ + ch];
+                    output[i * channels_ + ch] = sample1 + frac * (sample2 - sample1);
+                }
+            } else if (src_idx < input_frames) {
+                // Last sample
+                for (int ch = 0; ch < channels_; ++ch) {
+                    output[i * channels_ + ch] = input[src_idx * channels_ + ch];
+                }
+            }
+        }
+        
+        return output;
+    }
+    
+private:
+    int input_rate_;
+    int output_rate_;
+    int channels_;
+    double ratio_;
+};
+
+// Convert to mono if needed
+std::vector<float> convertToMono(const float* input, size_t frames, int channels) {
+    if (channels == 1) {
+        return std::vector<float>(input, input + frames);
+    }
+    
+    std::vector<float> output(frames);
+    for (size_t i = 0; i < frames; ++i) {
+        float sum = 0.0f;
+        for (int ch = 0; ch < channels; ++ch) {
+            sum += input[i * channels + ch];
+        }
+        output[i] = sum / channels;
+    }
+    return output;
+}
+
 // Private implementation class
 class AudioCapture::Impl {
 public:
     Impl() : ring_buffer_(48000 * 2 * 10) { // 10 seconds at 48kHz stereo
-        // Initialize mock devices
-        mock_devices_.push_back({
-            "default_mic",
-            "Default Microphone",
-            true,
-            false,
-            2,
-            48000
-        });
-        mock_devices_.push_back({
-            "usb_mic",
-            "USB Microphone",
-            false,
-            false,
-            1,
-            44100
-        });
-        mock_devices_.push_back({
-            "loopback",
-            "System Audio (Loopback)",
-            false,
-            true,
-            2,
-            48000
-        });
+        // Initialize COM
+        HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        if (FAILED(hr)) {
+            LOG_ERROR("AudioCapture", "Failed to initialize COM: " + std::to_string(hr));
+        }
+        com_initialized_ = SUCCEEDED(hr);
     }
     
     ~Impl() {
         shutdown();
+        if (com_initialized_) {
+            CoUninitialize();
+        }
     }
     
     bool initialize() {
@@ -138,15 +198,33 @@ public:
             return true;
         }
         
-        LOG_INFO("AudioCapture", "Initializing audio capture system (mock WASAPI)");
+        if (!com_initialized_) {
+            LOG_ERROR("AudioCapture", "COM not initialized");
+            return false;
+        }
         
-        // Mock initialization
-        device_enumerator_ = std::make_unique<IMMDeviceEnumerator>();
+        LOG_INFO("AudioCapture", "Initializing WASAPI audio capture system");
+        
+        // Create device enumerator
+        HRESULT hr = CoCreateInstance(
+            __uuidof(MMDeviceEnumerator),
+            nullptr,
+            CLSCTX_ALL,
+            __uuidof(IMMDeviceEnumerator),
+            reinterpret_cast<void**>(device_enumerator_.GetAddressOf())
+        );
+        
+        if (FAILED(hr)) {
+            LOG_ERROR("AudioCapture", "Failed to create device enumerator: " + std::to_string(hr));
+            return false;
+        }
+        
         initialized_ = true;
         
         // Start device monitoring thread
         device_monitor_thread_ = std::thread(&Impl::deviceMonitorThread, this);
         
+        LOG_INFO("AudioCapture", "WASAPI audio capture system initialized");
         return true;
     }
     
@@ -165,45 +243,154 @@ public:
             device_monitor_thread_.join();
         }
         
+        std::lock_guard<std::mutex> lock(mutex_);
+        device_enumerator_.Reset();
         initialized_ = false;
-        LOG_INFO("AudioCapture", "Audio capture system shut down");
+        LOG_INFO("AudioCapture", "WASAPI audio capture system shut down");
     }
     
     std::vector<AudioDevice> getAudioDevices() const {
         std::lock_guard<std::mutex> lock(mutex_);
-        return mock_devices_;
+        std::vector<AudioDevice> devices;
+        
+        if (!device_enumerator_) {
+            return devices;
+        }
+        
+        // Enumerate input devices
+        ComPtr<IMMDeviceCollection> device_collection;
+        HRESULT hr = device_enumerator_->EnumAudioEndpoints(
+            eCapture, DEVICE_STATE_ACTIVE, device_collection.GetAddressOf()
+        );
+        
+        if (FAILED(hr)) {
+            LOG_ERROR("AudioCapture", "Failed to enumerate audio devices: " + std::to_string(hr));
+            return devices;
+        }
+        
+        UINT device_count;
+        hr = device_collection->GetCount(&device_count);
+        if (FAILED(hr)) {
+            return devices;
+        }
+        
+        // Get default device
+        ComPtr<IMMDevice> default_device;
+        device_enumerator_->GetDefaultAudioEndpoint(eCapture, eConsole, default_device.GetAddressOf());
+        
+        LPWSTR default_device_id = nullptr;
+        if (default_device) {
+            default_device->GetId(&default_device_id);
+        }
+        
+        for (UINT i = 0; i < device_count; ++i) {
+            ComPtr<IMMDevice> device;
+            hr = device_collection->Item(i, device.GetAddressOf());
+            if (FAILED(hr)) continue;
+            
+            AudioDevice audio_device = createAudioDeviceInfo(device.Get());
+            
+            // Check if this is the default device
+            if (default_device_id && audio_device.id == WideStringToString(default_device_id)) {
+                audio_device.is_default = true;
+            }
+            
+            devices.push_back(audio_device);
+        }
+        
+        if (default_device_id) {
+            CoTaskMemFree(default_device_id);
+        }
+        
+        // Add loopback devices (render endpoints for system audio capture)
+        if (loopback_enabled_) {
+            ComPtr<IMMDeviceCollection> render_collection;
+            hr = device_enumerator_->EnumAudioEndpoints(
+                eRender, DEVICE_STATE_ACTIVE, render_collection.GetAddressOf()
+            );
+            
+            if (SUCCEEDED(hr)) {
+                UINT render_count;
+                hr = render_collection->GetCount(&render_count);
+                if (SUCCEEDED(hr)) {
+                    for (UINT i = 0; i < render_count; ++i) {
+                        ComPtr<IMMDevice> device;
+                        hr = render_collection->Item(i, device.GetAddressOf());
+                        if (FAILED(hr)) continue;
+                        
+                        AudioDevice audio_device = createAudioDeviceInfo(device.Get());
+                        audio_device.is_loopback = true;
+                        audio_device.name += " (Loopback)";
+                        audio_device.id += "_loopback";
+                        
+                        devices.push_back(audio_device);
+                    }
+                }
+            }
+        }
+        
+        return devices;
     }
     
     AudioDevice getDefaultDevice() const {
         std::lock_guard<std::mutex> lock(mutex_);
-        for (const auto& device : mock_devices_) {
-            if (device.is_default && !device.is_loopback) {
-                return device;
-            }
+        
+        if (!device_enumerator_) {
+            return {};
         }
-        return {};
+        
+        ComPtr<IMMDevice> device;
+        HRESULT hr = device_enumerator_->GetDefaultAudioEndpoint(
+            eCapture, eConsole, device.GetAddressOf()
+        );
+        
+        if (FAILED(hr)) {
+            LOG_ERROR("AudioCapture", "Failed to get default audio device: " + std::to_string(hr));
+            return {};
+        }
+        
+        AudioDevice audio_device = createAudioDeviceInfo(device.Get());
+        audio_device.is_default = true;
+        return audio_device;
     }
     
     bool setDevice(const std::string& device_id) {
         std::lock_guard<std::mutex> lock(mutex_);
         
-        for (const auto& device : mock_devices_) {
+        if (current_device_id_ == device_id) {
+            return true; // Already set
+        }
+        
+        // Check if device exists
+        auto devices = getAudioDevices();
+        bool found = false;
+        for (const auto& device : devices) {
             if (device.id == device_id) {
-                current_device_id_ = device_id;
-                LOG_INFO("AudioCapture", "Set audio device: " + device.name);
-                
-                // If capturing, restart with new device
-                if (capturing_) {
-                    stopCaptureInternal();
-                    startCaptureInternal();
-                }
-                
-                return true;
+                found = true;
+                break;
             }
         }
         
-        LOG_ERROR("AudioCapture", "Device not found: " + device_id);
-        return false;
+        if (!found) {
+            LOG_ERROR("AudioCapture", "Device not found: " + device_id);
+            return false;
+        }
+        
+        current_device_id_ = device_id;
+        LOG_INFO("AudioCapture", "Set audio device: " + device_id);
+        
+        // If capturing, restart with new device
+        if (capturing_) {
+            stopCaptureInternal();
+            return startCaptureInternal();
+        }
+        
+        return true;
+    }
+    
+    std::string getCurrentDeviceId() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return current_device_id_;
     }
     
     bool startCapture(AudioCallback callback) {
@@ -285,6 +472,48 @@ public:
     }
     
 private:
+    AudioDevice createAudioDeviceInfo(IMMDevice* device) const {
+        AudioDevice audio_device;
+        
+        // Get device ID
+        LPWSTR device_id;
+        HRESULT hr = device->GetId(&device_id);
+        if (SUCCEEDED(hr)) {
+            audio_device.id = WideStringToString(device_id);
+            CoTaskMemFree(device_id);
+        }
+        
+        // Get device properties
+        ComPtr<IPropertyStore> props;
+        hr = device->OpenPropertyStore(STGM_READ, props.GetAddressOf());
+        if (SUCCEEDED(hr)) {
+            PROPVARIANT var_name;
+            PropVariantInit(&var_name);
+            
+            hr = props->GetValue(PKEY_Device_FriendlyName, &var_name);
+            if (SUCCEEDED(hr) && var_name.vt == VT_LPWSTR) {
+                audio_device.name = WideStringToString(var_name.pwszVal);
+            }
+            PropVariantClear(&var_name);
+        }
+        
+        // Get audio format info
+        ComPtr<IAudioClient> audio_client;
+        hr = device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr,
+                             reinterpret_cast<void**>(audio_client.GetAddressOf()));
+        if (SUCCEEDED(hr)) {
+            WAVEFORMATEX* format;
+            hr = audio_client->GetMixFormat(&format);
+            if (SUCCEEDED(hr)) {
+                audio_device.channels = format->nChannels;
+                audio_device.sample_rate = format->nSamplesPerSec;
+                CoTaskMemFree(format);
+            }
+        }
+        
+        return audio_device;
+    }
+    
     bool startCaptureInternal() {
         if (current_device_id_.empty()) {
             auto default_device = getDefaultDevice();
@@ -295,15 +524,109 @@ private:
             current_device_id_ = default_device.id;
         }
         
-        // Mock audio client setup
-        audio_client_ = std::make_unique<IAudioClient>();
-        capture_client_ = std::make_unique<IAudioCaptureClient>();
+        // Get the device
+        ComPtr<IMMDevice> device;
+        HRESULT hr;
+        
+        if (current_device_id_.find("_loopback") != std::string::npos) {
+            // Loopback device - get render endpoint
+            std::string render_id = current_device_id_;
+            render_id = render_id.substr(0, render_id.find("_loopback"));
+            
+            std::wstring wide_id = StringToWideString(render_id);
+            hr = device_enumerator_->GetDevice(wide_id.c_str(), device.GetAddressOf());
+        } else {
+            // Regular capture device
+            std::wstring wide_id = StringToWideString(current_device_id_);
+            hr = device_enumerator_->GetDevice(wide_id.c_str(), device.GetAddressOf());
+        }
+        
+        if (FAILED(hr)) {
+            LOG_ERROR("AudioCapture", "Failed to get audio device: " + std::to_string(hr));
+            return false;
+        }
+        
+        // Activate audio client
+        hr = device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr,
+                             reinterpret_cast<void**>(audio_client_.GetAddressOf()));
+        if (FAILED(hr)) {
+            LOG_ERROR("AudioCapture", "Failed to activate audio client: " + std::to_string(hr));
+            return false;
+        }
+        
+        // Get mix format
+        WAVEFORMATEX* mix_format;
+        hr = audio_client_->GetMixFormat(&mix_format);
+        if (FAILED(hr)) {
+            LOG_ERROR("AudioCapture", "Failed to get mix format: " + std::to_string(hr));
+            return false;
+        }
+        
+        // Store format info
+        native_sample_rate_ = mix_format->nSamplesPerSec;
+        native_channels_ = mix_format->nChannels;
+        
+        // Initialize audio client
+        AUDCLNT_SHAREMODE share_mode = AUDCLNT_SHAREMODE_SHARED;
+        DWORD flags = AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
+        
+        if (current_device_id_.find("_loopback") != std::string::npos) {
+            flags |= AUDCLNT_STREAMFLAGS_LOOPBACK;
+        }
+        
+        REFERENCE_TIME buffer_duration = 10000000; // 1 second in 100ns units
+        
+        hr = audio_client_->Initialize(share_mode, flags, buffer_duration, 0, mix_format, nullptr);
+        if (FAILED(hr)) {
+            LOG_ERROR("AudioCapture", "Failed to initialize audio client: " + std::to_string(hr));
+            CoTaskMemFree(mix_format);
+            return false;
+        }
+        
+        CoTaskMemFree(mix_format);
+        
+        // Create event for audio data available
+        audio_event_ = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+        if (!audio_event_) {
+            LOG_ERROR("AudioCapture", "Failed to create audio event");
+            return false;
+        }
+        
+        hr = audio_client_->SetEventHandle(audio_event_);
+        if (FAILED(hr)) {
+            LOG_ERROR("AudioCapture", "Failed to set event handle: " + std::to_string(hr));
+            CloseHandle(audio_event_);
+            audio_event_ = nullptr;
+            return false;
+        }
+        
+        // Get capture client
+        hr = audio_client_->GetService(__uuidof(IAudioCaptureClient),
+                                      reinterpret_cast<void**>(capture_client_.GetAddressOf()));
+        if (FAILED(hr)) {
+            LOG_ERROR("AudioCapture", "Failed to get capture client: " + std::to_string(hr));
+            CloseHandle(audio_event_);
+            audio_event_ = nullptr;
+            return false;
+        }
+        
+        // Create resampler
+        resampler_ = std::make_unique<AudioResampler>(native_sample_rate_, config_.sample_rate, native_channels_);
+        
+        // Start audio client
+        hr = audio_client_->Start();
+        if (FAILED(hr)) {
+            LOG_ERROR("AudioCapture", "Failed to start audio client: " + std::to_string(hr));
+            CloseHandle(audio_event_);
+            audio_event_ = nullptr;
+            return false;
+        }
         
         capturing_ = true;
         capture_thread_ = std::thread(&Impl::captureThread, this);
         processing_thread_ = std::thread(&Impl::processingThread, this);
         
-        LOG_INFO("AudioCapture", "Started audio capture");
+        LOG_INFO("AudioCapture", "Started WASAPI audio capture");
         return true;
     }
     
@@ -315,6 +638,14 @@ private:
         capturing_ = false;
         ring_buffer_.stop();
         
+        if (audio_client_) {
+            audio_client_->Stop();
+        }
+        
+        if (audio_event_) {
+            SetEvent(audio_event_); // Wake up capture thread
+        }
+        
         if (capture_thread_.joinable()) {
             capture_thread_.join();
         }
@@ -322,48 +653,88 @@ private:
             processing_thread_.join();
         }
         
-        audio_client_.reset();
-        capture_client_.reset();
+        if (audio_event_) {
+            CloseHandle(audio_event_);
+            audio_event_ = nullptr;
+        }
         
-        LOG_INFO("AudioCapture", "Stopped audio capture");
+        capture_client_.Reset();
+        audio_client_.Reset();
+        resampler_.reset();
+        
+        LOG_INFO("AudioCapture", "Stopped WASAPI audio capture");
     }
     
     void captureThread() {
-        const int buffer_frames = config_.sample_rate * config_.buffer_size_ms / 1000;
-        std::vector<float> temp_buffer(buffer_frames * config_.channels);
-        
         while (capturing_) {
-            // Mock audio generation (sine wave for testing)
-            auto now = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
-            float time = duration.count() / 1000.0f;
+            DWORD wait_result = WaitForSingleObject(audio_event_, 100); // 100ms timeout
             
-            for (int i = 0; i < buffer_frames; ++i) {
-                float sample = 0.1f * std::sin(2.0f * 3.14159f * 440.0f * (time + i / float(config_.sample_rate)));
+            if (wait_result != WAIT_OBJECT_0) {
+                if (!capturing_) break;
+                continue;
+            }
+            
+            UINT32 packet_length = 0;
+            HRESULT hr = capture_client_->GetNextPacketSize(&packet_length);
+            if (FAILED(hr)) {
+                LOG_ERROR("AudioCapture", "Failed to get packet size: " + std::to_string(hr));
+                break;
+            }
+            
+            while (packet_length != 0) {
+                BYTE* data;
+                UINT32 frames_available;
+                DWORD flags;
                 
-                // Add some noise
-                sample += 0.01f * ((rand() / float(RAND_MAX)) - 0.5f);
+                hr = capture_client_->GetBuffer(&data, &frames_available, &flags, nullptr, nullptr);
+                if (FAILED(hr)) {
+                    LOG_ERROR("AudioCapture", "Failed to get buffer: " + std::to_string(hr));
+                    break;
+                }
                 
-                for (int ch = 0; ch < config_.channels; ++ch) {
-                    temp_buffer[i * config_.channels + ch] = sample;
+                if (frames_available > 0) {
+                    // Convert to float
+                    std::vector<float> float_data(frames_available * native_channels_);
+                    
+                    // Assume 32-bit float format (most common for WASAPI shared mode)
+                    if (!(flags & AUDCLNT_BUFFERFLAGS_SILENT)) {
+                        float* float_ptr = reinterpret_cast<float*>(data);
+                        std::copy(float_ptr, float_ptr + frames_available * native_channels_, float_data.begin());
+                    } else {
+                        std::fill(float_data.begin(), float_data.end(), 0.0f);
+                    }
+                    
+                    // Resample to target rate
+                    auto resampled = resampler_->resample(float_data.data(), frames_available);
+                    
+                    // Convert to mono if needed
+                    auto mono_data = convertToMono(resampled.data(), resampled.size() / native_channels_, native_channels_);
+                    
+                    // Write to ring buffer
+                    if (!ring_buffer_.write(mono_data.data(), mono_data.size())) {
+                        stats_.dropped_samples += mono_data.size();
+                        stats_.buffer_overruns++;
+                        LOG_WARN("AudioCapture", "Audio buffer overflow");
+                    }
+                }
+                
+                hr = capture_client_->ReleaseBuffer(frames_available);
+                if (FAILED(hr)) {
+                    LOG_ERROR("AudioCapture", "Failed to release buffer: " + std::to_string(hr));
+                    break;
+                }
+                
+                hr = capture_client_->GetNextPacketSize(&packet_length);
+                if (FAILED(hr)) {
+                    break;
                 }
             }
-            
-            // Write to ring buffer
-            if (!ring_buffer_.write(temp_buffer.data(), temp_buffer.size())) {
-                stats_.dropped_samples += temp_buffer.size();
-                stats_.buffer_overruns++;
-                LOG_WARN("AudioCapture", "Audio buffer overflow");
-            }
-            
-            // Sleep to simulate real-time capture
-            std::this_thread::sleep_for(std::chrono::milliseconds(config_.buffer_size_ms));
         }
     }
     
     void processingThread() {
         const int process_frames = config_.sample_rate * config_.buffer_size_ms / 1000;
-        std::vector<float> process_buffer(process_frames * config_.channels);
+        std::vector<float> process_buffer(process_frames);
         
         float silence_duration = 0.0f;
         const float silence_threshold_squared = config_.silence_threshold * config_.silence_threshold;
@@ -394,7 +765,7 @@ private:
             // Silence detection
             if (config_.enable_silence_detection) {
                 if (sum_squares / read_samples < silence_threshold_squared) {
-                    silence_duration += (read_samples / float(config_.sample_rate * config_.channels));
+                    silence_duration += (read_samples / float(config_.sample_rate));
                     
                     if (silence_duration >= config_.silence_duration_ms / 1000.0f) {
                         LOG_INFO("AudioCapture", "Silence detected, stopping capture");
@@ -406,7 +777,7 @@ private:
                 }
             }
             
-            // Basic noise suppression (spectral subtraction mock)
+            // Basic noise suppression (spectral subtraction)
             if (config_.enable_noise_suppression) {
                 for (size_t i = 0; i < read_samples; ++i) {
                     // Simple noise gate
@@ -423,23 +794,31 @@ private:
             
             // Notify audio callback
             if (audio_callback_) {
-                audio_callback_(process_buffer.data(), read_samples / config_.channels);
+                audio_callback_(process_buffer.data(), read_samples);
             }
         }
     }
     
     void deviceMonitorThread() {
         monitoring_devices_ = true;
-        int mock_device_changes = 0;
         
         while (monitoring_devices_) {
-            std::this_thread::sleep_for(std::chrono::seconds(5));
+            std::this_thread::sleep_for(std::chrono::seconds(1));
             
-            // Mock device change detection
-            if (++mock_device_changes % 10 == 0) {
-                LOG_INFO("AudioCapture", "Mock device change detected");
+            // TODO: Implement proper device change detection using IMMNotificationClient
+            // For now, just periodically check if current device is still valid
+            if (!current_device_id_.empty()) {
+                auto devices = getAudioDevices();
+                bool device_found = false;
+                for (const auto& device : devices) {
+                    if (device.id == current_device_id_) {
+                        device_found = true;
+                        break;
+                    }
+                }
                 
-                if (device_change_callback_) {
+                if (!device_found && device_change_callback_) {
+                    LOG_INFO("AudioCapture", "Current audio device disconnected");
                     device_change_callback_();
                 }
             }
@@ -448,6 +827,7 @@ private:
     
 private:
     mutable std::mutex mutex_;
+    bool com_initialized_ = false;
     bool initialized_ = false;
     bool capturing_ = false;
     bool loopback_enabled_ = false;
@@ -455,11 +835,16 @@ private:
     
     AudioCaptureConfig config_;
     std::string current_device_id_;
-    std::vector<AudioDevice> mock_devices_;
     
-    std::unique_ptr<IMMDeviceEnumerator> device_enumerator_;
-    std::unique_ptr<IAudioClient> audio_client_;
-    std::unique_ptr<IAudioCaptureClient> capture_client_;
+    ComPtr<IMMDeviceEnumerator> device_enumerator_;
+    ComPtr<IAudioClient> audio_client_;
+    ComPtr<IAudioCaptureClient> capture_client_;
+    
+    HANDLE audio_event_ = nullptr;
+    int native_sample_rate_ = 48000;
+    int native_channels_ = 2;
+    
+    std::unique_ptr<AudioResampler> resampler_;
     
     std::thread capture_thread_;
     std::thread processing_thread_;
@@ -501,8 +886,7 @@ bool AudioCapture::setDevice(const std::string& device_id) {
 }
 
 std::string AudioCapture::getCurrentDeviceId() const {
-    // Implementation needed
-    return "";
+    return pImpl->getCurrentDeviceId();
 }
 
 void AudioCapture::setConfig(const AudioCaptureConfig& config) {

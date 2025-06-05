@@ -172,7 +172,7 @@ If you encounter issues:
 
 ## Project Structure
 
-```
+```tree
 WhisperApp/
 ├── src/                    # Source code
 │   ├── core/              # Core functionality

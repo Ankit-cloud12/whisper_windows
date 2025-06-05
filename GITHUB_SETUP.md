@@ -12,7 +12,7 @@ This guide explains how to push WhisperApp to GitHub and use the automated relea
 
 Open a terminal in the WhisperApp directory and run:
 
-```bash
+```cmd
 cd c:\Users\Admin\vs_code\exported-assets\WhisperApp
 git init
 git add .
@@ -22,7 +22,7 @@ git commit -m "Initial commit: WhisperApp v1.0.0"
 ## Step 2: Create GitHub Repository
 
 ### Option A: Using GitHub CLI (Recommended)
-```bash
+```cmd
 gh repo create WhisperApp --public --source=. --remote=origin --push
 ```
 
@@ -35,7 +35,7 @@ gh repo create WhisperApp --public --source=. --remote=origin --push
 6. Create repository
 
 Then link your local repository:
-```bash
+```cmd
 git remote add origin https://github.com/YOUR_USERNAME/WhisperApp.git
 git branch -M main
 git push -u origin main
@@ -66,25 +66,25 @@ GitHub Actions should be enabled by default. The workflows will trigger automati
 ## Step 5: Creating a Release
 
 ### 1. Update Version
-```bash
-# Update version in VERSION file
-echo "1.0.1" > VERSION
+```cmd
+REM Update version in VERSION file
+echo 1.0.1 > VERSION
 
-# Update CHANGELOG.md with release notes
+REM Update CHANGELOG.md with release notes
 notepad CHANGELOG.md
 
-# Commit changes
+REM Commit changes
 git add VERSION CHANGELOG.md
 git commit -m "Bump version to 1.0.1"
 git push
 ```
 
 ### 2. Create and Push Tag
-```bash
-# Create annotated tag
+```cmd
+REM Create annotated tag
 git tag -a v1.0.1 -m "Release v1.0.1"
 
-# Push tag to trigger release workflow
+REM Push tag to trigger release workflow
 git push origin v1.0.1
 ```
 
@@ -159,24 +159,24 @@ Add these badges to your README.md:
 ## Development Workflow
 
 1. Create feature branch:
-   ```bash
+   ```cmd
    git checkout -b feature/new-feature
    ```
 
 2. Make changes and commit:
-   ```bash
+   ```cmd
    git add .
    git commit -m "Add new feature"
    ```
 
 3. Push branch and create PR:
-   ```bash
+   ```cmd
    git push -u origin feature/new-feature
    gh pr create
    ```
 
 4. After PR approval and merge, delete branch:
-   ```bash
+   ```cmd
    git checkout main
    git pull
    git branch -d feature/new-feature

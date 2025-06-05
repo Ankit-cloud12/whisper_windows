@@ -9,9 +9,6 @@
 #include <QTableWidget>
 #include <QProgressBar>
 #include <QLabel>
-#include <QNetworkAccessManager>
-#include <QNetworkRequest>
-#include <QNetworkReply>
 #include <QMessageBox>
 #include <QFileDialog>
 #include <QDir>
@@ -19,9 +16,6 @@
 #include <QFileInfo>
 #include <QStandardPaths>
 #include <QHeaderView>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonArray>
 #include <QTimer>
 #include <QCheckBox>
 #include <QTextEdit>
@@ -31,45 +25,38 @@
 #include <QTime>
 #include <QQueue>
 #include <QDesktopServices>
+#include <QIcon>
+#include <QPixmap>
+#include <QApplication>
 
-struct ModelInfo {
-    QString name;
-    QString fileName;
-    QString url;
-    qint64 size;
-    QString description;
-    float accuracy;
-    float speed;
-    bool isDownloaded;
-};
-
-ModelDownloader::ModelDownloader(QWidget* parent)
+ModelDownloader::ModelDownloader(ModelManager* model_manager, QWidget* parent)
     : QDialog(parent)
-    , m_networkManager(nullptr)
-    , m_currentDownload(nullptr)
-    , m_currentModelIndex(-1)
+    , model_manager(model_manager)
+    , is_downloading(false)
 {
-    setupUI();
-    loadAvailableModels();
-    connectSignals();
-    checkInstalledModels();
+    if (!model_manager) {
+        throw std::invalid_argument("ModelManager cannot be null");
+    }
+    
+    setupUi();
+    refreshModelList();
+    
+    // Setup update timer
+    update_timer = new QTimer(this);
+    update_timer->setInterval(UPDATE_INTERVAL_MS);
+    connect(update_timer, &QTimer::timeout, this, &ModelDownloader::onTimerTimeout);
     
     Logger::instance().log(Logger::LogLevel::Info, "ModelDownloader", "Model downloader initialized");
 }
 
 ModelDownloader::~ModelDownloader()
 {
-    if (m_currentDownload) {
-        m_currentDownload->abort();
-        delete m_currentDownload;
-    }
-    
-    if (m_networkManager) {
-        delete m_networkManager;
+    if (is_downloading && !current_download_id.isEmpty()) {
+        model_manager->cancelDownload(current_download_id.toStdString());
     }
 }
 
-void ModelDownloader::setupUI()
+void ModelDownloader::setupUi()
 {
     setWindowTitle(tr("Model Manager"));
     setModal(true);
@@ -88,29 +75,8 @@ void ModelDownloader::setupUI()
     QGroupBox* modelGroup = new QGroupBox(tr("Available Models"), leftWidget);
     QVBoxLayout* modelLayout = new QVBoxLayout(modelGroup);
     
-    // Create model table
-    m_modelTable = new QTableWidget(0, 6, this);
-    m_modelTable->setHorizontalHeaderLabels(
-        QStringList() << tr("Model") << tr("Size") << tr("Accuracy") 
-                     << tr("Speed") << tr("Status") << tr("Progress")
-    );
-    m_modelTable->horizontalHeader()->setStretchLastSection(true);
-    m_modelTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    m_modelTable->setAlternatingRowColors(true);
-    m_modelTable->verticalHeader()->setVisible(false);
-    
-    // Set column widths
-    m_modelTable->setColumnWidth(0, 120);
-    m_modelTable->setColumnWidth(1, 80);
-    m_modelTable->setColumnWidth(2, 80);
-    m_modelTable->setColumnWidth(3, 80);
-    m_modelTable->setColumnWidth(4, 100);
-    
-    modelLayout->addWidget(m_modelTable);
-    
-    // Download queue
-    m_queueCheck = new QCheckBox(tr("Queue downloads"), modelGroup);
-    modelLayout->addWidget(m_queueCheck);
+    createModelTable();
+    modelLayout->addWidget(model_table);
     
     leftLayout->addWidget(modelGroup);
     
@@ -122,26 +88,33 @@ void ModelDownloader::setupUI()
     QGroupBox* infoGroup = new QGroupBox(tr("Model Information"), rightWidget);
     QVBoxLayout* infoLayout = new QVBoxLayout(infoGroup);
     
-    m_modelInfoText = new QTextEdit(infoGroup);
-    m_modelInfoText->setReadOnly(true);
-    m_modelInfoText->setMaximumHeight(200);
-    infoLayout->addWidget(m_modelInfoText);
+    model_name_label = new QLabel(tr("Select a model"), infoGroup);
+    model_name_label->setWordWrap(true);
+    model_size_label = new QLabel("", infoGroup);
+    model_performance_label = new QLabel("", infoGroup);
+    model_languages_label = new QLabel("", infoGroup);
+    model_description_label = new QLabel("", infoGroup);
+    model_description_label->setWordWrap(true);
     
+    QFormLayout* detailsLayout = new QFormLayout();
+    detailsLayout->addRow(tr("Name:"), model_name_label);
+    detailsLayout->addRow(tr("Size:"), model_size_label);
+    detailsLayout->addRow(tr("Performance:"), model_performance_label);
+    detailsLayout->addRow(tr("Languages:"), model_languages_label);
+    detailsLayout->addRow(tr("Description:"), model_description_label);
+    
+    infoLayout->addLayout(detailsLayout);
     rightLayout->addWidget(infoGroup);
     
     // Download statistics group
     QGroupBox* statsGroup = new QGroupBox(tr("Download Statistics"), rightWidget);
     QFormLayout* statsLayout = new QFormLayout(statsGroup);
     
-    m_downloadSpeedLabel = new QLabel(tr("0 MB/s"), statsGroup);
-    m_downloadedSizeLabel = new QLabel(tr("0 MB / 0 MB"), statsGroup);
-    m_downloadTimeLabel = new QLabel(tr("00:00"), statsGroup);
-    m_remainingTimeLabel = new QLabel(tr("--:--"), statsGroup);
+    download_speed_label = new QLabel(tr("0 MB/s"), statsGroup);
+    download_eta_label = new QLabel(tr("--:--"), statsGroup);
     
-    statsLayout->addRow(tr("Download speed:"), m_downloadSpeedLabel);
-    statsLayout->addRow(tr("Downloaded:"), m_downloadedSizeLabel);
-    statsLayout->addRow(tr("Elapsed time:"), m_downloadTimeLabel);
-    statsLayout->addRow(tr("Remaining time:"), m_remainingTimeLabel);
+    statsLayout->addRow(tr("Download speed:"), download_speed_label);
+    statsLayout->addRow(tr("Remaining time:"), download_eta_label);
     
     rightLayout->addWidget(statsGroup);
     
@@ -149,8 +122,8 @@ void ModelDownloader::setupUI()
     QGroupBox* diskGroup = new QGroupBox(tr("Disk Space"), rightWidget);
     QFormLayout* diskLayout = new QFormLayout(diskGroup);
     
-    m_diskSpaceLabel = new QLabel(diskGroup);
-    diskLayout->addRow(tr("Available space:"), m_diskSpaceLabel);
+    disk_space_label = new QLabel(diskGroup);
+    diskLayout->addRow(tr("Available space:"), disk_space_label);
     
     rightLayout->addWidget(diskGroup);
     rightLayout->addStretch();
@@ -167,680 +140,538 @@ void ModelDownloader::setupUI()
     QGroupBox* progressGroup = new QGroupBox(tr("Download Progress"), this);
     QVBoxLayout* progressLayout = new QVBoxLayout(progressGroup);
     
-    m_progressBar = new QProgressBar(this);
-    m_progressBar->setTextVisible(true);
-    m_statusLabel = new QLabel(tr("Ready"), this);
+    download_progress = new QProgressBar(this);
+    download_progress->setTextVisible(true);
+    download_status_label = new QLabel(tr("Ready"), this);
     
-    progressLayout->addWidget(m_progressBar);
-    progressLayout->addWidget(m_statusLabel);
+    progressLayout->addWidget(download_progress);
+    progressLayout->addWidget(download_status_label);
     
     mainLayout->addWidget(progressGroup);
     
     // Buttons
     QHBoxLayout* buttonLayout = new QHBoxLayout();
     
-    m_downloadButton = new QPushButton(tr("Download"), this);
-    m_downloadButton->setIcon(style()->standardIcon(QStyle::SP_ArrowDown));
-    m_downloadAllButton = new QPushButton(tr("Download All"), this);
-    m_pauseButton = new QPushButton(tr("Pause"), this);
-    m_pauseButton->setEnabled(false);
-    m_cancelButton = new QPushButton(tr("Cancel"), this);
-    m_cancelButton->setEnabled(false);
-    m_deleteButton = new QPushButton(tr("Delete"), this);
-    m_deleteButton->setIcon(style()->standardIcon(QStyle::SP_TrashIcon));
-    m_refreshButton = new QPushButton(tr("Refresh"), this);
-    m_refreshButton->setIcon(style()->standardIcon(QStyle::SP_BrowserReload));
-    m_settingsButton = new QPushButton(tr("Settings"), this);
-    QPushButton* closeButton = new QPushButton(tr("Close"), this);
+    download_button = new QPushButton(tr("Download"), this);
+    download_button->setIcon(style()->standardIcon(QStyle::SP_ArrowDown));
+    cancel_button = new QPushButton(tr("Cancel"), this);
+    cancel_button->setEnabled(false);
+    delete_button = new QPushButton(tr("Delete"), this);
+    delete_button->setIcon(style()->standardIcon(QStyle::SP_TrashIcon));
+    verify_button = new QPushButton(tr("Verify"), this);
+    refresh_button = new QPushButton(tr("Refresh"), this);
+    refresh_button->setIcon(style()->standardIcon(QStyle::SP_BrowserReload));
+    close_button = new QPushButton(tr("Close"), this);
     
-    buttonLayout->addWidget(m_downloadButton);
-    buttonLayout->addWidget(m_downloadAllButton);
-    buttonLayout->addWidget(m_pauseButton);
-    buttonLayout->addWidget(m_cancelButton);
-    buttonLayout->addWidget(m_deleteButton);
-    buttonLayout->addWidget(m_refreshButton);
-    buttonLayout->addWidget(m_settingsButton);
+    buttonLayout->addWidget(download_button);
+    buttonLayout->addWidget(cancel_button);
+    buttonLayout->addWidget(delete_button);
+    buttonLayout->addWidget(verify_button);
+    buttonLayout->addWidget(refresh_button);
     buttonLayout->addStretch();
-    buttonLayout->addWidget(closeButton);
+    buttonLayout->addWidget(close_button);
     
     mainLayout->addLayout(buttonLayout);
     
-    // Connect close button
-    connect(closeButton, &QPushButton::clicked, this, &QDialog::accept);
-    
-    // Update timer for download stats
-    m_updateTimer = new QTimer(this);
-    m_updateTimer->setInterval(1000);
-    connect(m_updateTimer, &QTimer::timeout, this, &ModelDownloader::updateDownloadStats);
+    // Connect signals
+    connect(download_button, &QPushButton::clicked, this, &ModelDownloader::onDownloadClicked);
+    connect(cancel_button, &QPushButton::clicked, this, &ModelDownloader::onCancelDownload);
+    connect(delete_button, &QPushButton::clicked, this, &ModelDownloader::onDeleteModel);
+    connect(verify_button, &QPushButton::clicked, this, &ModelDownloader::onVerifyModel);
+    connect(refresh_button, &QPushButton::clicked, this, &ModelDownloader::refreshModelList);
+    connect(close_button, &QPushButton::clicked, this, &QDialog::accept);
     
     updateDiskSpace();
 }
 
-void ModelDownloader::connectSignals()
+void ModelDownloader::createModelTable()
 {
-    connect(m_downloadButton, &QPushButton::clicked, this, &ModelDownloader::downloadSelectedModel);
-    connect(m_downloadAllButton, &QPushButton::clicked, this, &ModelDownloader::downloadAllModels);
-    connect(m_pauseButton, &QPushButton::clicked, this, &ModelDownloader::pauseDownload);
-    connect(m_cancelButton, &QPushButton::clicked, this, &ModelDownloader::cancelDownload);
-    connect(m_deleteButton, &QPushButton::clicked, this, &ModelDownloader::deleteSelectedModel);
-    connect(m_refreshButton, &QPushButton::clicked, this, &ModelDownloader::refreshModelList);
-    connect(m_settingsButton, &QPushButton::clicked, this, &ModelDownloader::showDownloadSettings);
+    model_table = new QTableWidget(0, COLUMN_COUNT, this);
     
-    connect(m_modelTable, &QTableWidget::itemSelectionChanged,
-            this, &ModelDownloader::onModelSelectionChanged);
-    connect(m_modelTable, &QTableWidget::cellDoubleClicked,
-            this, &ModelDownloader::onModelDoubleClicked);
+    QStringList headers;
+    headers << tr("Status") << tr("Model") << tr("Size") << tr("Performance") << tr("Languages") << tr("Description");
+    model_table->setHorizontalHeaderLabels(headers);
+    
+    model_table->horizontalHeader()->setStretchLastSection(true);
+    model_table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    model_table->setAlternatingRowColors(true);
+    model_table->verticalHeader()->setVisible(false);
+    model_table->setSortingEnabled(true);
+    
+    // Set column widths
+    model_table->setColumnWidth(COL_STATUS, 80);
+    model_table->setColumnWidth(COL_NAME, 120);
+    model_table->setColumnWidth(COL_SIZE, 80);
+    model_table->setColumnWidth(COL_PERFORMANCE, 100);
+    model_table->setColumnWidth(COL_LANGUAGES, 120);
+    
+    connect(model_table, &QTableWidget::currentItemChanged,
+            this, [this](QTableWidgetItem* current, QTableWidgetItem* previous) {
+                Q_UNUSED(previous)
+                if (current) {
+                    onModelSelectionChanged(current->row(), current->column());
+                }
+            });
 }
 
-void ModelDownloader::loadAvailableModels()
+void ModelDownloader::populateModelTable()
 {
-    // Clear existing models
-    m_models.clear();
-    m_modelTable->setRowCount(0);
+    model_table->setRowCount(0);
+    model_status_map.clear();
     
-    // Define available models
-    m_models.append({
-        "tiny", "ggml-tiny.bin",
-        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
-        39000000, // 39 MB
-        tr("Smallest model, fastest processing. Good for quick transcriptions with moderate accuracy."),
-        0.60f, 1.0f, false
-    });
+    // Get available models from ModelManager
+    auto models = model_manager->getAvailableModels();
     
-    m_models.append({
-        "tiny.en", "ggml-tiny.en.bin",
-        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin",
-        39000000, // 39 MB
-        tr("English-only tiny model. Faster and more accurate for English."),
-        0.65f, 1.0f, false
-    });
-    
-    m_models.append({
-        "base", "ggml-base.bin",
-        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
-        74000000, // 74 MB
-        tr("Base model with better accuracy than tiny. Good balance of speed and quality."),
-        0.70f, 0.8f, false
-    });
-    
-    m_models.append({
-        "base.en", "ggml-base.en.bin",
-        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin",
-        74000000, // 74 MB
-        tr("English-only base model. Better accuracy for English transcriptions."),
-        0.75f, 0.8f, false
-    });
-    
-    m_models.append({
-        "small", "ggml-small.bin",
-        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
-        244000000, // 244 MB
-        tr("Small model with good accuracy. Suitable for most use cases."),
-        0.80f, 0.6f, false
-    });
-    
-    m_models.append({
-        "small.en", "ggml-small.en.bin",
-        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin",
-        244000000, // 244 MB
-        tr("English-only small model. Excellent accuracy for English."),
-        0.85f, 0.6f, false
-    });
-    
-    m_models.append({
-        "medium", "ggml-medium.bin",
-        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin",
-        769000000, // 769 MB
-        tr("Medium model with high accuracy. Good for professional use."),
-        0.90f, 0.4f, false
-    });
-    
-    m_models.append({
-        "medium.en", "ggml-medium.en.bin",
-        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.en.bin",
-        769000000, // 769 MB
-        tr("English-only medium model. Very high accuracy for English."),
-        0.92f, 0.4f, false
-    });
-    
-    m_models.append({
-        "large-v1", "ggml-large-v1.bin",
-        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v1.bin",
-        1550000000, // 1.55 GB
-        tr("Large v1 model with excellent accuracy. Requires significant processing power."),
-        0.95f, 0.2f, false
-    });
-    
-    m_models.append({
-        "large-v2", "ggml-large-v2.bin",
-        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v2.bin",
-        1550000000, // 1.55 GB
-        tr("Large v2 model. Latest version with best accuracy. Very slow processing."),
-        0.97f, 0.15f, false
-    });
-    
-    m_models.append({
-        "large-v3", "ggml-large-v3.bin",
-        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin",
-        1550000000, // 1.55 GB
-        tr("Large v3 model. State-of-the-art accuracy. Requires high-end hardware."),
-        0.98f, 0.1f, false
-    });
-    
-    // Add models to table
-    for (int i = 0; i < m_models.size(); ++i) {
-        addModelToTable(i);
-    }
-}
-
-void ModelDownloader::addModelToTable(int modelIndex)
-{
-    const ModelInfo& model = m_models[modelIndex];
-    
-    int row = m_modelTable->rowCount();
-    m_modelTable->insertRow(row);
-    
-    // Model name
-    QTableWidgetItem* nameItem = new QTableWidgetItem(model.name);
-    nameItem->setData(Qt::UserRole, modelIndex);
-    m_modelTable->setItem(row, 0, nameItem);
-    
-    // Size
-    QString sizeStr = formatSize(model.size);
-    m_modelTable->setItem(row, 1, new QTableWidgetItem(sizeStr));
-    
-    // Accuracy
-    m_modelTable->setItem(row, 2, new QTableWidgetItem(QString::number(model.accuracy * 100, 'f', 0) + "%"));
-    
-    // Speed
-    m_modelTable->setItem(row, 3, new QTableWidgetItem(QString::number(model.speed * 100, 'f', 0) + "%"));
-    
-    // Status
-    QString status = model.isDownloaded ? tr("Downloaded") : tr("Not Downloaded");
-    QTableWidgetItem* statusItem = new QTableWidgetItem(status);
-    if (model.isDownloaded) {
-        statusItem->setForeground(Qt::darkGreen);
-    }
-    m_modelTable->setItem(row, 4, statusItem);
-    
-    // Progress (will be used for download progress)
-    QProgressBar* progressBar = new QProgressBar();
-    progressBar->setVisible(false);
-    m_modelTable->setCellWidget(row, 5, progressBar);
-}
-
-void ModelDownloader::checkInstalledModels()
-{
-    Settings& settings = Settings::instance();
-    QString modelsPath = settings.getSetting(Settings::Key::ModelsPath).toString();
-    
-    if (modelsPath.isEmpty()) {
-        modelsPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/models";
-    }
-    
-    QDir modelsDir(modelsPath);
-    
-    for (int i = 0; i < m_models.size(); ++i) {
-        QString modelPath = modelsDir.filePath(m_models[i].fileName);
-        m_models[i].isDownloaded = QFile::exists(modelPath);
+    for (const auto& model : models) {
+        QString model_id = QString::fromStdString(model.id);
+        ModelStatus status = getModelStatus(model_id);
+        model_status_map[model_id] = status;
         
-        // Update table
-        for (int row = 0; row < m_modelTable->rowCount(); ++row) {
-            int modelIndex = m_modelTable->item(row, 0)->data(Qt::UserRole).toInt();
-            if (modelIndex == i) {
-                QString status = m_models[i].isDownloaded ? tr("Downloaded") : tr("Not Downloaded");
-                QTableWidgetItem* statusItem = m_modelTable->item(row, 4);
-                statusItem->setText(status);
-                statusItem->setForeground(m_models[i].isDownloaded ? Qt::darkGreen : Qt::black);
-                break;
-            }
-        }
+        int row = model_table->rowCount();
+        model_table->insertRow(row);
+        
+        updateModelRow(row, model, status);
     }
     
     updateButtonStates();
 }
 
-void ModelDownloader::downloadSelectedModel()
+void ModelDownloader::updateModelRow(int row, const ModelInfo& model, ModelStatus status)
 {
-    int currentRow = m_modelTable->currentRow();
-    if (currentRow < 0) {
-        return;
+    QString model_id = QString::fromStdString(model.id);
+    
+    // Status column
+    QTableWidgetItem* statusItem = new QTableWidgetItem();
+    statusItem->setIcon(getStatusIcon(status));
+    statusItem->setData(Qt::UserRole, model_id);
+    
+    switch (status) {
+        case ModelStatus::NotDownloaded:
+            statusItem->setText(tr("Not Downloaded"));
+            break;
+        case ModelStatus::Downloading:
+            statusItem->setText(tr("Downloading"));
+            break;
+        case ModelStatus::Downloaded:
+            statusItem->setText(tr("Downloaded"));
+            statusItem->setForeground(Qt::darkGreen);
+            break;
+        case ModelStatus::UpdateAvailable:
+            statusItem->setText(tr("Update Available"));
+            statusItem->setForeground(Qt::blue);
+            break;
+        case ModelStatus::Corrupted:
+            statusItem->setText(tr("Corrupted"));
+            statusItem->setForeground(Qt::red);
+            break;
+        case ModelStatus::Queued:
+            statusItem->setText(tr("Queued"));
+            statusItem->setForeground(Qt::darkYellow);
+            break;
     }
     
-    int modelIndex = m_modelTable->item(currentRow, 0)->data(Qt::UserRole).toInt();
-    startDownload(modelIndex);
+    model_table->setItem(row, COL_STATUS, statusItem);
+    
+    // Name column
+    model_table->setItem(row, COL_NAME, new QTableWidgetItem(QString::fromStdString(model.name)));
+    
+    // Size column
+    model_table->setItem(row, COL_SIZE, new QTableWidgetItem(formatFileSize(model.size_bytes)));
+    
+    // Performance column
+    QString perf = QString("Acc: %1% / Spd: %2%")
+                   .arg(model.performance.accuracy, 0, 'f', 0)
+                   .arg(model.performance.relative_speed * 100, 0, 'f', 0);
+    model_table->setItem(row, COL_PERFORMANCE, new QTableWidgetItem(perf));
+    
+    // Languages column
+    QString langs;
+    if (model.capabilities.multilingual) {
+        langs = tr("Multilingual (%1)").arg(model.capabilities.languages.size());
+    } else if (!model.capabilities.languages.empty()) {
+        langs = QString::fromStdString(model.capabilities.languages[0]).toUpper();
+    }
+    model_table->setItem(row, COL_LANGUAGES, new QTableWidgetItem(langs));
+    
+    // Description column
+    model_table->setItem(row, COL_DESCRIPTION, new QTableWidgetItem(QString::fromStdString(model.description)));
 }
 
-void ModelDownloader::downloadAllModels()
+ModelStatus ModelDownloader::getModelStatus(const QString& model_id) const
 {
-    m_downloadQueue.clear();
+    std::string id = model_id.toStdString();
     
-    for (int i = 0; i < m_models.size(); ++i) {
-        if (!m_models[i].isDownloaded) {
-            m_downloadQueue.enqueue(i);
-        }
+    if (model_manager->isDownloading(id)) {
+        return ModelStatus::Downloading;
     }
     
-    if (!m_downloadQueue.isEmpty()) {
-        processDownloadQueue();
-    }
-}
-
-void ModelDownloader::pauseDownload()
-{
-    if (m_currentDownload) {
-        // TODO: Implement pause functionality
-        m_isPaused = !m_isPaused;
-        m_pauseButton->setText(m_isPaused ? tr("Resume") : tr("Pause"));
-    }
-}
-
-void ModelDownloader::cancelDownload()
-{
-    if (m_currentDownload) {
-        m_currentDownload->abort();
-        m_statusLabel->setText(tr("Download cancelled"));
-        Logger::instance().log(Logger::LogLevel::Info, "ModelDownloader", "Download cancelled by user");
-    }
-}
-
-void ModelDownloader::deleteSelectedModel()
-{
-    int currentRow = m_modelTable->currentRow();
-    if (currentRow < 0) {
-        return;
-    }
-    
-    int modelIndex = m_modelTable->item(currentRow, 0)->data(Qt::UserRole).toInt();
-    const ModelInfo& model = m_models[modelIndex];
-    
-    if (!model.isDownloaded) {
-        return;
-    }
-    
-    int ret = QMessageBox::question(this, tr("Delete Model"),
-                                   tr("Are you sure you want to delete the %1 model?").arg(model.name),
-                                   QMessageBox::Yes | QMessageBox::No);
-    
-    if (ret == QMessageBox::Yes) {
-        Settings& settings = Settings::instance();
-        QString modelsPath = settings.getSetting(Settings::Key::ModelsPath).toString();
-        
-        if (modelsPath.isEmpty()) {
-            modelsPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/models";
-        }
-        
-        QString modelPath = QDir(modelsPath).filePath(model.fileName);
-        
-        if (QFile::remove(modelPath)) {
-            m_models[modelIndex].isDownloaded = false;
-            checkInstalledModels();
-            QMessageBox::information(this, tr("Model Deleted"),
-                                   tr("Model %1 has been deleted successfully.").arg(model.name));
-            Logger::instance().log(Logger::LogLevel::Info, "ModelDownloader", 
-                                 QString("Deleted model: %1").arg(model.name).toStdString());
+    if (model_manager->isModelDownloaded(id)) {
+        if (model_manager->verifyModel(id)) {
+            return ModelStatus::Downloaded;
         } else {
-            QMessageBox::critical(this, tr("Delete Failed"),
-                                tr("Failed to delete model %1.").arg(model.name));
+            return ModelStatus::Corrupted;
         }
     }
+    
+    return ModelStatus::NotDownloaded;
+}
+
+void ModelDownloader::showWithModel(const QString& model_id)
+{
+    show();
+    
+    if (!model_id.isEmpty()) {
+        // Find and select the model in the table
+        for (int row = 0; row < model_table->rowCount(); ++row) {
+            QTableWidgetItem* item = model_table->item(row, COL_STATUS);
+            if (item && item->data(Qt::UserRole).toString() == model_id) {
+                model_table->selectRow(row);
+                break;
+            }
+        }
+    }
+}
+
+QString ModelDownloader::getSelectedModel() const
+{
+    int currentRow = model_table->currentRow();
+    if (currentRow >= 0) {
+        QTableWidgetItem* item = model_table->item(currentRow, COL_STATUS);
+        if (item) {
+            return item->data(Qt::UserRole).toString();
+        }
+    }
+    return QString();
 }
 
 void ModelDownloader::refreshModelList()
 {
-    loadAvailableModels();
-    checkInstalledModels();
+    populateModelTable();
     updateDiskSpace();
+    checkForUpdates();
 }
 
-void ModelDownloader::showDownloadSettings()
-{
-    // TODO: Show download settings dialog
-    QMessageBox::information(this, tr("Download Settings"), 
-                           tr("Download settings dialog coming soon!"));
-}
-
-void ModelDownloader::startDownload(int modelIndex)
-{
-    if (modelIndex < 0 || modelIndex >= m_models.size()) {
-        return;
-    }
-    
-    if (m_models[modelIndex].isDownloaded) {
-        QMessageBox::information(this, tr("Already Downloaded"),
-                               tr("Model %1 is already downloaded.").arg(m_models[modelIndex].name));
-        return;
-    }
-    
-    if (!m_networkManager) {
-        m_networkManager = new QNetworkAccessManager(this);
-    }
-    
-    m_currentModelIndex = modelIndex;
-    const ModelInfo& model = m_models[modelIndex];
-    
-    // Check disk space
-    qint64 availableSpace = QStorageInfo(QDir::currentPath()).bytesAvailable();
-    if (availableSpace < model.size * 1.2) { // 20% buffer
-        QMessageBox::critical(this, tr("Insufficient Disk Space"),
-                            tr("Not enough disk space to download this model.\n"
-                               "Required: %1\nAvailable: %2")
-                            .arg(formatSize(model.size))
-                            .arg(formatSize(availableSpace)));
-        return;
-    }
-    
-    m_statusLabel->setText(tr("Downloading %1 model...").arg(model.name));
-    m_progressBar->setValue(0);
-    
-    // Update UI
-    m_downloadButton->setEnabled(false);
-    m_downloadAllButton->setEnabled(false);
-    m_pauseButton->setEnabled(true);
-    m_cancelButton->setEnabled(true);
-    
-    // Show progress bar for this model
-    for (int row = 0; row < m_modelTable->rowCount(); ++row) {
-        if (m_modelTable->item(row, 0)->data(Qt::UserRole).toInt() == modelIndex) {
-            QProgressBar* progressBar = qobject_cast<QProgressBar*>(m_modelTable->cellWidget(row, 5));
-            if (progressBar) {
-                progressBar->setVisible(true);
-                progressBar->setValue(0);
-            }
-            break;
-        }
-    }
-    
-    // Reset download stats
-    m_downloadStartTime = QTime::currentTime();
-    m_lastBytesReceived = 0;
-    m_updateTimer->start();
-    
-    // Create request
-    QNetworkRequest request(model.url);
-    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
-    
-    m_currentDownload = m_networkManager->get(request);
-    
-    // Connect signals
-    connect(m_currentDownload, &QNetworkReply::downloadProgress,
-            this, &ModelDownloader::updateDownloadProgress);
-    connect(m_currentDownload, &QNetworkReply::finished,
-            this, &ModelDownloader::downloadFinished);
-    connect(m_currentDownload, &QNetworkReply::readyRead,
-            this, &ModelDownloader::downloadReadyRead);
-    
-    // Prepare output file
-    Settings& settings = Settings::instance();
-    QString modelsPath = settings.getSetting(Settings::Key::ModelsPath).toString();
-    
-    if (modelsPath.isEmpty()) {
-        modelsPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/models";
-    }
-    
-    QDir().mkpath(modelsPath);
-    QString outputPath = QDir(modelsPath).filePath(model.fileName + ".tmp");
-    
-    m_outputFile = new QFile(outputPath);
-    if (!m_outputFile->open(QIODevice::WriteOnly)) {
-        QMessageBox::critical(this, tr("File Error"),
-                            tr("Cannot create output file: %1").arg(m_outputFile->errorString()));
-        cancelDownload();
-        return;
-    }
-    
-    Logger::instance().log(Logger::LogLevel::Info, "ModelDownloader", 
-                         QString("Started downloading model: %1").arg(model.name).toStdString());
-}
-
-void ModelDownloader::updateDownloadProgress(qint64 bytesReceived, qint64 bytesTotal)
-{
-    if (bytesTotal > 0) {
-        int progress = static_cast<int>((bytesReceived * 100) / bytesTotal);
-        m_progressBar->setValue(progress);
-        
-        // Update model-specific progress bar
-        for (int row = 0; row < m_modelTable->rowCount(); ++row) {
-            if (m_modelTable->item(row, 0)->data(Qt::UserRole).toInt() == m_currentModelIndex) {
-                QProgressBar* progressBar = qobject_cast<QProgressBar*>(m_modelTable->cellWidget(row, 5));
-                if (progressBar) {
-                    progressBar->setValue(progress);
-                }
-                break;
-            }
-        }
-        
-        m_downloadedSizeLabel->setText(QString("%1 / %2")
-            .arg(formatSize(bytesReceived))
-            .arg(formatSize(bytesTotal)));
-    }
-}
-
-void ModelDownloader::downloadReadyRead()
-{
-    if (m_outputFile && m_currentDownload) {
-        m_outputFile->write(m_currentDownload->readAll());
-    }
-}
-
-void ModelDownloader::downloadFinished()
-{
-    m_updateTimer->stop();
-    
-    if (m_outputFile) {
-        m_outputFile->close();
-        delete m_outputFile;
-        m_outputFile = nullptr;
-    }
-    
-    if (!m_currentDownload) {
-        return;
-    }
-    
-    // Hide progress bar
-    for (int row = 0; row < m_modelTable->rowCount(); ++row) {
-        if (m_modelTable->item(row, 0)->data(Qt::UserRole).toInt() == m_currentModelIndex) {
-            QProgressBar* progressBar = qobject_cast<QProgressBar*>(m_modelTable->cellWidget(row, 5));
-            if (progressBar) {
-                progressBar->setVisible(false);
-            }
-            break;
-        }
-    }
-    
-    if (m_currentDownload->error() == QNetworkReply::NoError) {
-        // Rename temp file to final name
-        Settings& settings = Settings::instance();
-        QString modelsPath = settings.getSetting(Settings::Key::ModelsPath).toString();
-
-void ModelDownloader::onModelDoubleClicked(int row, int column)
+void ModelDownloader::onModelSelectionChanged(int row, int column)
 {
     Q_UNUSED(column)
     
-    int modelIndex = m_modelTable->item(row, 0)->data(Qt::UserRole).toInt();
-    if (!m_models[modelIndex].isDownloaded) {
-        startDownload(modelIndex);
-    }
-}
-
-void ModelDownloader::updateButtonStates()
-{
-    int currentRow = m_modelTable->currentRow();
-    bool hasSelection = (currentRow >= 0);
-    bool isDownloading = (m_currentDownload != nullptr);
-    
-    if (hasSelection) {
-        int modelIndex = m_modelTable->item(currentRow, 0)->data(Qt::UserRole).toInt();
-        bool isDownloaded = m_models[modelIndex].isDownloaded;
-        
-        m_downloadButton->setEnabled(!isDownloaded && !isDownloading);
-        m_deleteButton->setEnabled(isDownloaded && !isDownloading);
-    } else {
-        m_downloadButton->setEnabled(false);
-        m_deleteButton->setEnabled(false);
-    }
-    
-    m_downloadAllButton->setEnabled(!isDownloading);
-    m_refreshButton->setEnabled(!isDownloading);
-}
-
-void ModelDownloader::updateDownloadStats()
-{
-    if (!m_currentDownload) {
-        return;
-    }
-    
-    // Calculate elapsed time
-    QTime elapsed = QTime(0, 0).addMSecs(m_downloadStartTime.msecsTo(QTime::currentTime()));
-    m_downloadTimeLabel->setText(elapsed.toString("mm:ss"));
-    
-    // Calculate download speed
-    qint64 bytesReceived = m_currentDownload->bytesAvailable();
-    if (m_lastBytesReceived > 0) {
-        qint64 bytesPerSecond = bytesReceived - m_lastBytesReceived;
-        m_downloadSpeedLabel->setText(formatSize(bytesPerSecond) + "/s");
-        
-        // Estimate remaining time
-        qint64 totalBytes = m_currentDownload->header(QNetworkRequest::ContentLengthHeader).toLongLong();
-        if (totalBytes > 0 && bytesPerSecond > 0) {
-            qint64 remainingBytes = totalBytes - bytesReceived;
-            int remainingSeconds = remainingBytes / bytesPerSecond;
-            QTime remaining = QTime(0, 0).addSecs(remainingSeconds);
-            m_remainingTimeLabel->setText(remaining.toString("mm:ss"));
+    if (row >= 0) {
+        QTableWidgetItem* item = model_table->item(row, COL_STATUS);
+        if (item) {
+            QString model_id = item->data(Qt::UserRole).toString();
+            showModelDetails(model_id);
+            emit modelSelected(model_id);
         }
     }
     
-    m_lastBytesReceived = bytesReceived;
+    updateButtonStates();
+}
+
+void ModelDownloader::onDownloadClicked()
+{
+    QString model_id = getSelectedModel();
+    if (model_id.isEmpty()) {
+        return;
+    }
+    
+    std::string id = model_id.toStdString();
+    ModelInfo model = model_manager->getModelInfo(id);
+    
+    if (model.id.empty()) {
+        QMessageBox::warning(this, tr("Error"), tr("Selected model not found."));
+        return;
+    }
+    
+    // Check disk space
+    uint64_t available_space = model_manager->getAvailableDiskSpace();
+    if (available_space < model.size_bytes * 1.2) { // 20% buffer
+        QMessageBox::critical(this, tr("Insufficient Disk Space"),
+                            tr("Not enough disk space to download this model.\n"
+                               "Required: %1\nAvailable: %2")
+                            .arg(formatFileSize(model.size_bytes))
+                            .arg(formatFileSize(available_space)));
+        return;
+    }
+    
+    // Start download
+    current_download_id = model_id;
+    is_downloading = true;
+    
+    download_status_label->setText(tr("Starting download of %1...").arg(QString::fromStdString(model.name)));
+    download_progress->setValue(0);
+    
+    auto progress_callback = [this](const DownloadProgress& progress) {
+        // Update progress on UI thread
+        QMetaObject::invokeMethod(this, [this, progress]() {
+            onDownloadProgress(progress);
+        });
+    };
+    
+    auto completion_callback = [this](bool success, const std::string& error) {
+        // Update completion on UI thread
+        QMetaObject::invokeMethod(this, [this, success, error]() {
+            onDownloadComplete(current_download_id, success, QString::fromStdString(error));
+        });
+    };
+    
+    bool started = model_manager->downloadModel(id, progress_callback, completion_callback);
+    
+    if (!started) {
+        QMessageBox::warning(this, tr("Download Failed"), tr("Failed to start download."));
+        is_downloading = false;
+        current_download_id.clear();
+    } else {
+        update_timer->start();
+        updateButtonStates();
+    }
+}
+
+void ModelDownloader::onCancelDownload()
+{
+    if (!current_download_id.isEmpty()) {
+        model_manager->cancelDownload(current_download_id.toStdString());
+        download_status_label->setText(tr("Cancelling download..."));
+    }
+}
+
+void ModelDownloader::onDeleteModel()
+{
+    QString model_id = getSelectedModel();
+    if (model_id.isEmpty()) {
+        return;
+    }
+    
+    std::string id = model_id.toStdString();
+    ModelInfo model = model_manager->getModelInfo(id);
+    
+    if (!model_manager->isModelDownloaded(id)) {
+        QMessageBox::information(this, tr("Not Downloaded"), tr("Model is not downloaded."));
+        return;
+    }
+    
+    int ret = QMessageBox::question(this, tr("Delete Model"),
+                                   tr("Are you sure you want to delete the %1 model?")
+                                   .arg(QString::fromStdString(model.name)),
+                                   QMessageBox::Yes | QMessageBox::No);
+    
+    if (ret == QMessageBox::Yes) {
+        if (model_manager->deleteModel(id)) {
+            refreshModelList();
+            QMessageBox::information(this, tr("Model Deleted"),
+                                   tr("Model %1 has been deleted successfully.")
+                                   .arg(QString::fromStdString(model.name)));
+        } else {
+            QMessageBox::critical(this, tr("Delete Failed"),
+                                tr("Failed to delete model %1.")
+                                .arg(QString::fromStdString(model.name)));
+        }
+    }
+}
+
+void ModelDownloader::onVerifyModel()
+{
+    QString model_id = getSelectedModel();
+    if (model_id.isEmpty()) {
+        return;
+    }
+    
+    std::string id = model_id.toStdString();
+    ModelInfo model = model_manager->getModelInfo(id);
+    
+    if (!model_manager->isModelDownloaded(id)) {
+        QMessageBox::information(this, tr("Not Downloaded"), tr("Model is not downloaded."));
+        return;
+    }
+    
+    bool is_valid = model_manager->verifyModel(id);
+    
+    if (is_valid) {
+        QMessageBox::information(this, tr("Verification Successful"),
+                               tr("Model %1 is valid and ready to use.")
+                               .arg(QString::fromStdString(model.name)));
+    } else {
+        QMessageBox::warning(this, tr("Verification Failed"),
+                           tr("Model %1 failed verification. Consider re-downloading.")
+                           .arg(QString::fromStdString(model.name)));
+    }
+    
+    refreshModelList();
+}
+
+void ModelDownloader::onDownloadProgress(const DownloadProgress& progress)
+{
+    download_progress->setValue(static_cast<int>(progress.progress_percent));
+    
+    QString status = tr("Downloading %1: %2%")
+                    .arg(QString::fromStdString(progress.model_id))
+                    .arg(progress.progress_percent, 0, 'f', 1);
+    download_status_label->setText(status);
+    
+    download_speed_label->setText(formatSpeed(progress.speed_mbps));
+    download_eta_label->setText(formatTimeRemaining(progress.eta_seconds));
+}
+
+void ModelDownloader::onDownloadComplete(const QString& model_id, bool success, const QString& error)
+{
+    update_timer->stop();
+    is_downloading = false;
+    current_download_id.clear();
+    
+    download_progress->setValue(success ? 100 : 0);
+    
+    if (success) {
+        download_status_label->setText(tr("Download completed successfully"));
+        refreshModelList();
+        emit modelDownloaded(model_id);
+        
+        QMessageBox::information(this, tr("Download Complete"),
+                               tr("Model %1 has been downloaded successfully.")
+                               .arg(model_id));
+    } else {
+        download_status_label->setText(tr("Download failed: %1").arg(error));
+        
+        QMessageBox::critical(this, tr("Download Failed"),
+                            tr("Failed to download model %1:\n%2")
+                            .arg(model_id).arg(error));
+    }
+    
+    updateButtonStates();
 }
 
 void ModelDownloader::updateDiskSpace()
 {
-    Settings& settings = Settings::instance();
-    QString modelsPath = settings.getSetting(Settings::Key::ModelsPath).toString();
+    uint64_t available = model_manager->getAvailableDiskSpace();
+    uint64_t used = model_manager->getTotalDiskUsage();
     
-    if (modelsPath.isEmpty()) {
-        modelsPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/models";
-    }
-    
-    QStorageInfo storage(modelsPath);
-    qint64 available = storage.bytesAvailable();
-    qint64 total = storage.bytesTotal();
-    
-    m_diskSpaceLabel->setText(QString("%1 / %2")
-        .arg(formatSize(available))
-        .arg(formatSize(total)));
+    disk_space_label->setText(tr("Used: %1 / Available: %2")
+                             .arg(formatFileSize(used))
+                             .arg(formatFileSize(available)));
     
     if (available < 1000000000) { // Less than 1GB
-        m_diskSpaceLabel->setStyleSheet("QLabel { color: red; }");
+        disk_space_label->setStyleSheet("QLabel { color: red; }");
     } else if (available < 5000000000) { // Less than 5GB
-        m_diskSpaceLabel->setStyleSheet("QLabel { color: orange; }");
+        disk_space_label->setStyleSheet("QLabel { color: orange; }");
     } else {
-        m_diskSpaceLabel->setStyleSheet("");
+        disk_space_label->setStyleSheet("");
     }
 }
 
-        if (modelsPath.isEmpty()) {
-            modelsPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/models";
-        }
-        
-        const ModelInfo& model = m_models[m_currentModelIndex];
-        QString tempPath = QDir(modelsPath).filePath(model.fileName + ".tmp");
-        QString finalPath = QDir(modelsPath).filePath(model.fileName);
-        
-        if (QFile::rename(tempPath, finalPath)) {
-            m_statusLabel->setText(tr("Download completed: %1").arg(model.name));
-            m_models[m_currentModelIndex].isDownloaded = true;
-            checkInstalledModels();
-            
-            Logger::instance().log(Logger::LogLevel::Info, "ModelDownloader", 
-                                 QString("Successfully downloaded model: %1").arg(model.name).toStdString());
-            
-            // Process next in queue if any
-            if (!m_downloadQueue.isEmpty()) {
-                processDownloadQueue();
-            } else {
-                QMessageBox::information(this, tr("Download Complete"),
-                                       tr("Model %1 has been downloaded successfully.").arg(model.name));
-            }
-        } else {
-            QMessageBox::critical(this, tr("File Error"),
-                                tr("Failed to save downloaded file."));
-        }
-    } else if (m_currentDownload->error() == QNetworkReply::OperationCanceledError) {
-        // Download was cancelled
-        Settings& settings = Settings::instance();
-        QString modelsPath = settings.getSetting(Settings::Key::ModelsPath).toString();
-        
-        if (modelsPath.isEmpty()) {
-            modelsPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/models";
-        }
-        
-        const ModelInfo& model = m_models[m_currentModelIndex];
-        QString tempPath = QDir(modelsPath).filePath(model.fileName + ".tmp");
-        QFile::remove(tempPath);
-    } else {
-        m_statusLabel->setText(tr("Download failed: %1").arg(m_currentDownload->errorString()));
-        
-        Logger::instance().log(Logger::LogLevel::Error, "ModelDownloader", 
-                             QString("Download failed: %1").arg(m_currentDownload->errorString()).toStdString());
-        
-        QMessageBox::critical(this, tr("Download Failed"),
-                            tr("Failed to download model: %1").arg(m_currentDownload->errorString()));
-    }
-    
-    m_currentDownload->deleteLater();
-    m_currentDownload = nullptr;
-    m_progressBar->setValue(0);
-    
-    // Update UI
-    m_downloadButton->setEnabled(true);
-    m_downloadAllButton->setEnabled(true);
-    m_pauseButton->setEnabled(false);
-    m_cancelButton->setEnabled(false);
-    
-    updateButtonStates();
+void ModelDownloader::updateDownloadStats()
+{
+    // Statistics are updated via progress callback
     updateDiskSpace();
 }
 
-void ModelDownloader::processDownloadQueue()
+void ModelDownloader::checkForUpdates()
 {
-    if (m_downloadQueue.isEmpty()) {
+    // Check for model updates using ModelManager
+    model_manager->checkForUpdates([this](const std::vector<std::string>& updated_models) {
+        for (const auto& model_id : updated_models) {
+            QString id = QString::fromStdString(model_id);
+            model_status_map[id] = ModelStatus::UpdateAvailable;
+        }
+        
+        if (!updated_models.empty()) {
+            QMetaObject::invokeMethod(this, [this]() {
+                refreshModelList();
+            });
+        }
+    });
+}
+
+void ModelDownloader::onTimerTimeout()
+{
+    updateDownloadStats();
+}
+
+void ModelDownloader::updateButtonStates()
+{
+    QString selected_model = getSelectedModel();
+    bool has_selection = !selected_model.isEmpty();
+    
+    if (has_selection) {
+        ModelStatus status = getModelStatus(selected_model);
+        
+        download_button->setEnabled(!is_downloading && status == ModelStatus::NotDownloaded);
+        delete_button->setEnabled(!is_downloading && status == ModelStatus::Downloaded);
+        verify_button->setEnabled(!is_downloading && status == ModelStatus::Downloaded);
+    } else {
+        download_button->setEnabled(false);
+        delete_button->setEnabled(false);
+        verify_button->setEnabled(false);
+    }
+    
+    cancel_button->setEnabled(is_downloading);
+    refresh_button->setEnabled(!is_downloading);
+}
+
+void ModelDownloader::showModelDetails(const QString& model_id)
+{
+    if (model_id.isEmpty()) {
+        model_name_label->setText(tr("Select a model"));
+        model_size_label->clear();
+        model_performance_label->clear();
+        model_languages_label->clear();
+        model_description_label->clear();
         return;
     }
     
-    int modelIndex = m_downloadQueue.dequeue();
-    startDownload(modelIndex);
-}
-
-void ModelDownloader::onModelSelectionChanged()
-{
-    int currentRow = m_modelTable->currentRow();
+    std::string id = model_id.toStdString();
+    ModelInfo model = model_manager->getModelInfo(id);
     
-    if (currentRow >= 0) {
-        int modelIndex = m_modelTable->item(currentRow, 0)->data(Qt::UserRole).toInt();
-        const ModelInfo& model = m_models[modelIndex];
-        
-        // Update model info display
-        QString info = QString("<h3>%1</h3>").arg(model.name);
-        info += QString("<p>%1</p>").arg(model.description);
-        info += QString("<p><b>File:</b> %1</p>").arg(model.fileName);
-        info += QString("<p><b>Size:</b> %1</p>").arg(formatSize(model.size));
-        info += QString("<p><b>Accuracy:</b> %1%</p>").arg(model.accuracy * 100, 0, 'f', 0);
-        info += QString("<p><b>Speed:</b> %1%</p>").arg(model.speed * 100, 0, 'f', 0);
-        
-        m_modelInfoText->setHtml(info);
-    } else {
-        m_modelInfoText->clear();
+    if (model.id.empty()) {
+        return;
     }
     
-    updateButtonStates();
+    model_name_label->setText(QString::fromStdString(model.name));
+    model_size_label->setText(formatFileSize(model.size_bytes));
+    
+    QString perf = tr("Accuracy: %1% / Speed: %2% / Memory: %3 MB")
+                  .arg(model.performance.accuracy, 0, 'f', 0)
+                  .arg(model.performance.relative_speed * 100, 0, 'f', 0)
+                  .arg(model.performance.memory_mb);
+    model_performance_label->setText(perf);
+    
+    QStringList langs;
+    for (const auto& lang : model.capabilities.languages) {
+        langs << QString::fromStdString(lang).toUpper();
+    }
+    model_languages_label->setText(langs.join(", "));
+    
+    model_description_label->setText(QString::fromStdString(model.description));
 }
 
-QString ModelDownloader::formatSize(qint64 bytes) const
+QIcon ModelDownloader::getStatusIcon(ModelStatus status) const
 {
-    const qint64 KB = 1024;
-    const qint64 MB = KB * 1024;
-    const qint64 GB = MB * 1024;
+    switch (status) {
+        case ModelStatus::NotDownloaded:
+            return style()->standardIcon(QStyle::SP_DialogCancelButton);
+        case ModelStatus::Downloading:
+            return style()->standardIcon(QStyle::SP_ArrowDown);
+        case ModelStatus::Downloaded:
+            return style()->standardIcon(QStyle::SP_DialogApplyButton);
+        case ModelStatus::UpdateAvailable:
+            return style()->standardIcon(QStyle::SP_BrowserReload);
+        case ModelStatus::Corrupted:
+            return style()->standardIcon(QStyle::SP_MessageBoxWarning);
+        case ModelStatus::Queued:
+            return style()->standardIcon(QStyle::SP_MediaPlay);
+        default:
+            return QIcon();
+    }
+}
+
+bool ModelDownloader::showConfirmation(const QString& title, const QString& message)
+{
+    return QMessageBox::question(this, title, message, 
+                               QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes;
+}
+
+QString ModelDownloader::formatFileSize(uint64_t bytes) const
+{
+    const uint64_t KB = 1024;
+    const uint64_t MB = KB * 1024;
+    const uint64_t GB = MB * 1024;
     
     if (bytes >= GB) {
         return QString::number(bytes / double(GB), 'f', 2) + " GB";
@@ -850,5 +681,36 @@ QString ModelDownloader::formatSize(qint64 bytes) const
         return QString::number(bytes / double(KB), 'f', 1) + " KB";
     } else {
         return QString::number(bytes) + " B";
+    }
+}
+
+QString ModelDownloader::formatSpeed(float mbps) const
+{
+    if (mbps >= 1.0f) {
+        return QString::number(mbps, 'f', 1) + " MB/s";
+    } else {
+        return QString::number(mbps * 1024, 'f', 0) + " KB/s";
+    }
+}
+
+QString ModelDownloader::formatTimeRemaining(int seconds) const
+{
+    if (seconds < 0) {
+        return "--:--";
+    }
+    
+    int hours = seconds / 3600;
+    int minutes = (seconds % 3600) / 60;
+    int secs = seconds % 60;
+    
+    if (hours > 0) {
+        return QString("%1:%2:%3")
+               .arg(hours)
+               .arg(minutes, 2, 10, QChar('0'))
+               .arg(secs, 2, 10, QChar('0'));
+    } else {
+        return QString("%1:%2")
+               .arg(minutes, 2, 10, QChar('0'))
+               .arg(secs, 2, 10, QChar('0'));
     }
 }

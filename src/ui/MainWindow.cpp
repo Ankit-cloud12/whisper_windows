@@ -8,6 +8,7 @@
 #include "TranscriptionHistoryWidget.h"
 #include "../core/Settings.h"
 #include "../core/Logger.h"
+#include "../core/ModelManager.h"
 #include <iostream>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -31,6 +32,7 @@
 #include <QFileInfo>
 #include <QUuid>
 #include <QClipboard>
+#include <QStandardPaths>
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -42,7 +44,19 @@ MainWindow::MainWindow(QWidget* parent)
     , m_recordingTimer(nullptr)
     , m_recordingDuration(0)
     , m_historyWidget(nullptr)
+    , m_modelManager(nullptr)
 {
+    // Initialize ModelManager
+    m_modelManager = new ModelManager();
+    
+    // Initialize ModelManager with models directory
+    Settings& settings = Settings::instance();
+    QString modelsPath = settings.getSetting(Settings::Key::ModelsPath).toString();
+    if (modelsPath.isEmpty()) {
+        modelsPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/models";
+    }
+    m_modelManager->initialize(modelsPath.toStdString());
+    
     setupUI();
     createActions();
     createMenus();
@@ -58,6 +72,13 @@ MainWindow::MainWindow(QWidget* parent)
 MainWindow::~MainWindow()
 {
     saveWindowState();
+    
+    // Clean up ModelManager
+    if (m_modelManager) {
+        delete m_modelManager;
+        m_modelManager = nullptr;
+    }
+    
     Logger::instance().log(Logger::LogLevel::Info, "MainWindow", "Main window destroyed");
 }
 
@@ -564,7 +585,7 @@ void MainWindow::showSettings()
 
 void MainWindow::showModelManager()
 {
-    ModelDownloader dialog(this);
+    ModelDownloader dialog(m_modelManager, this);
     dialog.exec();
     
     // Refresh model list after dialog closes

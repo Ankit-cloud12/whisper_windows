@@ -14,25 +14,25 @@ This document provides comprehensive testing procedures for WhisperApp, includin
 
 ### Building and Running Tests
 
-```bash
-# Configure with tests enabled
+```cmd
+REM Configure with tests enabled
 cmake -B build -DBUILD_TESTS=ON
 
-# Build tests
+REM Build tests
 cmake --build build --target WhisperAppTests
 
-# Run all tests
+REM Run all tests
 cd build
 ctest --verbose
 
-# Or run test executable directly
-./tests/WhisperAppTests
+REM Or run test executable directly
+tests\WhisperAppTests.exe
 
-# Run specific test suite
-./tests/WhisperAppTests --gtest_filter=SettingsTest.*
+REM Run specific test suite
+tests\WhisperAppTests.exe --gtest_filter=SettingsTest.*
 
-# Run with detailed output
-./tests/WhisperAppTests --gtest_print_time=1 --gtest_color=yes
+REM Run with detailed output
+tests\WhisperAppTests.exe --gtest_print_time=1 --gtest_color=yes
 ```
 
 ### Test Categories
@@ -303,12 +303,12 @@ Location: `tests/data/configs/`
 ## Debugging Failed Tests
 
 ### Enable Debug Logging
-```bash
-# Set environment variable
-export WHISPER_LOG_LEVEL=DEBUG
+```cmd
+REM Set environment variable
+set WHISPER_LOG_LEVEL=DEBUG
 
-# Run tests with debug output
-./tests/WhisperAppTests --gtest_catch_exceptions=0
+REM Run tests with debug output
+tests\WhisperAppTests.exe --gtest_catch_exceptions=0
 ```
 
 ### Common Issues
@@ -340,15 +340,16 @@ jobs:
 ## Test Coverage
 
 ### Generate Coverage Report
-```bash
-# Build with coverage flags
+```cmd
+REM Build with coverage flags
 cmake -B build -DCMAKE_BUILD_TYPE=Debug -DENABLE_COVERAGE=ON
 
-# Run tests
-cd build && ctest
+REM Run tests
+cd build
+ctest
 
-# Generate report
-gcov src/core/*.cpp
+REM Generate report (requires additional tools on Windows)
+gcov src\core\*.cpp
 lcov --capture --directory . --output-file coverage.info
 genhtml coverage.info --output-directory coverage-report
 ```

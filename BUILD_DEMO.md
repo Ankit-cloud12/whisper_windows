@@ -24,31 +24,31 @@ The demo version of WhisperApp provides:
 ### Building
 
 1. Clone the repository:
-   ```bash
+   ```cmd
    git clone https://github.com/Ankit-cloud12/whisper_windows.git
-   cd whisper_windows/WhisperApp
+   cd whisper_windows\WhisperApp
    ```
 
 2. Create build directory:
-   ```bash
+   ```cmd
    mkdir build
    cd build
    ```
 
 3. Configure with CMake:
-   ```bash
+   ```cmd
    cmake .. -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="C:/Qt/6.7.0/msvc2019_64"
    ```
    (Adjust the Qt path to match your installation)
 
 4. Build:
-   ```bash
+   ```cmd
    cmake --build . --config Release
    ```
 
 5. Run the demo:
-   ```bash
-   ./Release/WhisperApp.exe
+   ```cmd
+   Release\WhisperApp.exe
    ```
 
 ## What Works in Demo Mode
@@ -71,7 +71,7 @@ The demo version of WhisperApp provides:
 To enable full functionality:
 
 1. Clone whisper.cpp:
-   ```bash
+   ```cmd
    cd third_party
    git clone https://github.com/ggerganov/whisper.cpp.git
    cd whisper.cpp
@@ -94,8 +94,8 @@ To enable full functionality:
 
 ### Missing DLLs at Runtime
 - Copy Qt DLLs to the output directory or use `windeployqt`:
-  ```bash
-  C:/Qt/6.7.0/msvc2019_64/bin/windeployqt.exe Release/WhisperApp.exe
+  ```cmd
+  C:\Qt\6.7.0\msvc2019_64\bin\windeployqt.exe Release\WhisperApp.exe
   ```
 
 ## GitHub Actions Status

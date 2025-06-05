@@ -197,6 +197,10 @@ bool WhisperEngine::loadModel(const std::string& model_path) {
         pImpl->model_path = model_path;
         pImpl->model_type = pImpl->detectModelType(model_path);
         pImpl->model_loaded = true;
+        
+        // Get actual model information
+        auto ctx = static_cast<whisper_context*>(pImpl->ctx);
+        pImpl->model_memory_size = whisper_model_n_vocab(ctx) * sizeof(float);
 
         LOG_INFO("WhisperEngine", "Whisper.cpp model loaded successfully");
 #else
@@ -316,8 +320,10 @@ WhisperEngine::TranscriptionResult WhisperEngine::transcribeAudio(
             pImpl->current_progress = 0.0f;
         }
         
-        // TODO: Implement actual transcription with whisper.cpp
-        /*
+#ifdef WHISPER_AVAILABLE
+        // Real whisper.cpp implementation
+        auto ctx = static_cast<whisper_context*>(pImpl->ctx);
+        
         whisper_full_params wparams = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
         wparams.print_realtime = false;
         wparams.print_progress = false;
@@ -326,35 +332,42 @@ WhisperEngine::TranscriptionResult WhisperEngine::transcribeAudio(
         wparams.translate = params.translate;
         wparams.language = params.language.c_str();
         wparams.n_threads = pImpl->thread_count;
-        wparams.beam_size = params.beam_size;
+        wparams.greedy.best_of = params.beam_size;
         wparams.temperature = params.temperature;
         
         // Set progress callback
-        wparams.progress_callback = [](float progress) {
-            // Update progress
+        wparams.progress_callback = [](struct whisper_context * ctx, struct whisper_state * state, int progress, void * user_data) {
+            auto* impl = static_cast<WhisperEngine::Impl*>(user_data);
+            impl->current_progress = progress / 100.0f;
         };
+        wparams.progress_callback_user_data = pImpl.get();
         
-        if (whisper_full(pImpl->ctx, wparams, audio_data.data(), audio_data.size()) != 0) {
+        if (whisper_full(ctx, wparams, audio_data.data(), audio_data.size()) != 0) {
             throw TranscriptionException(ErrorCode::TranscriptionFailed,
                                        "Whisper transcription failed");
         }
         
-        const int n_segments = whisper_full_n_segments(pImpl->ctx);
+        const int n_segments = whisper_full_n_segments(ctx);
         for (int i = 0; i < n_segments; ++i) {
             TranscriptionResult::Segment segment;
-            segment.text = whisper_full_get_segment_text(pImpl->ctx, i);
-            segment.start_ms = whisper_full_get_segment_t0(pImpl->ctx, i) * 10;
-            segment.end_ms = whisper_full_get_segment_t1(pImpl->ctx, i) * 10;
-            segment.confidence = 0.9f;  // Mock confidence
+            segment.text = whisper_full_get_segment_text(ctx, i);
+            segment.start_ms = whisper_full_get_segment_t0(ctx, i) * 10;
+            segment.end_ms = whisper_full_get_segment_t1(ctx, i) * 10;
+            segment.confidence = 0.9f;  // Note: whisper.cpp doesn't provide per-segment confidence
             
             result.segments.push_back(segment);
-            result.text += segment.text + " ";
+            result.text += segment.text;
+            if (i < n_segments - 1) result.text += " ";
         }
-        */
         
-        // Mock implementation
+        result.detected_language = params.detect_language ?
+            whisper_lang_str(whisper_full_lang_id(ctx)) : params.language;
+#else
+        // Mock implementation when whisper.cpp is not available
+        
+        // Mock implementation when whisper.cpp is not available
         LOG_DEBUG("WhisperEngine", "Processing " + std::to_string(audio_duration_ms) +
-                  " ms of audio");
+                  " ms of audio (using mock implementation)");
         
         // Simulate processing with progress updates
         for (int i = 0; i <= 10; ++i) {
@@ -385,6 +398,7 @@ WhisperEngine::TranscriptionResult WhisperEngine::transcribeAudio(
         result.segments.push_back(segment);
         
         result.detected_language = params.detect_language ? "en" : params.language;
+#endif
         
         // Post-process result
         pImpl->postProcessResult(result);

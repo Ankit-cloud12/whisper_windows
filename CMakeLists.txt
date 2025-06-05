@@ -29,16 +29,16 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
-# Add whisper.cpp as subdirectory (will be added when submodule is initialized)
-# Check if whisper.cpp exists
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/whisper.cpp/CMakeLists.txt")
+# Add whisper.cpp implementation directly in project
+# Check if whisper.cpp source exists
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/whisper.cpp/whisper.h")
     add_subdirectory(third_party/whisper.cpp)
     set(WHISPER_AVAILABLE TRUE)
-    message(STATUS "Whisper.cpp found and will be built")
+    message(STATUS "Whisper.cpp source found and will be built")
 else()
     set(WHISPER_AVAILABLE FALSE)
-    message(WARNING "Whisper.cpp not found. Please initialize the submodule or download whisper.cpp")
-    message(STATUS "Building without whisper.cpp - transcription will be disabled")
+    message(WARNING "Whisper.cpp source not found in third_party/whisper.cpp")
+    message(STATUS "Building without whisper.cpp - using stub implementation")
 endif()
 
 # Include directories
@@ -117,7 +117,7 @@ set(RESOURCES
 if(WIN32)
     set(CMAKE_WIN32_EXECUTABLE TRUE)
     
-    # Windows libraries
+    # Windows libraries for WASAPI
     set(PLATFORM_LIBS
         winmm
         ole32
@@ -127,6 +127,10 @@ if(WIN32)
         comdlg32
         uuid
         oleaut32
+        propsys
+        ksuser
+        mfplat
+        mfuuid
     )
     
     # Add Windows manifest for DPI awareness
@@ -137,6 +141,14 @@ if(WIN32)
         # Add manifest file if it exists
         # set(SOURCES ${SOURCES} resources/WhisperApp.manifest)
     endif()
+    
+    # Add preprocessor definitions for Windows audio
+    add_compile_definitions(
+        UNICODE
+        _UNICODE
+        NOMINMAX
+        WIN32_LEAN_AND_MEAN
+    )
 endif()
 
 # Create executable
