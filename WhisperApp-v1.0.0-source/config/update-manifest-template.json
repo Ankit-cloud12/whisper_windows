@@ -1,0 +1,51 @@
+{
+  "application": "WhisperApp",
+  "currentVersion": "{VERSION}",
+  "releaseDate": "{RELEASE_DATE}",
+  "releaseChannel": "stable",
+  "updates": [
+    {
+      "version": "{VERSION}",
+      "releaseDate": "{RELEASE_DATE}",
+      "mandatory": false,
+      "minimumOSVersion": "10.0.17763",
+      "downloads": {
+        "installer": {
+          "url": "https://github.com/yourname/whisperapp/releases/download/v{VERSION}/WhisperApp-{VERSION}-Setup.exe",
+          "size": "{INSTALLER_SIZE}",
+          "sha256": "{INSTALLER_SHA256}"
+        },
+        "portable": {
+          "url": "https://github.com/yourname/whisperapp/releases/download/v{VERSION}/WhisperApp-{VERSION}-portable-win64.zip",
+          "size": "{PORTABLE_SIZE}",
+          "sha256": "{PORTABLE_SHA256}"
+        }
+      },
+      "releaseNotes": {
+        "en": {
+          "title": "WhisperApp {VERSION} Released",
+          "highlights": [
+            "New feature 1",
+            "New feature 2",
+            "Performance improvements"
+          ],
+          "description": "This release includes several new features and improvements. See the full changelog for details.",
+          "changelogUrl": "https://github.com/yourname/whisperapp/blob/main/CHANGELOG.md"
+        }
+      },
+      "compatibility": {
+        "breakingChanges": false,
+        "configurationChanges": false,
+        "databaseMigration": false
+      }
+    }
+  ],
+  "updateCheckInterval": 86400,
+  "updateServerStatus": "online",
+  "announcement": {
+    "enabled": false,
+    "message": "",
+    "severity": "info",
+    "dismissible": true
+  }
+}

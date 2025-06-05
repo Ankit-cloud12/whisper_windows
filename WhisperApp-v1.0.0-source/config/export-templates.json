@@ -1,0 +1,65 @@
+{
+  "templates": {
+    "plain-text": {
+      "name": "Plain Text",
+      "description": "Simple text format",
+      "extension": ".txt",
+      "format": "{text}"
+    },
+    "timestamped": {
+      "name": "Timestamped",
+      "description": "Text with timestamps",
+      "extension": ".txt",
+      "format": "[{timestamp}] {text}"
+    },
+    "srt-subtitle": {
+      "name": "SRT Subtitle",
+      "description": "SubRip subtitle format",
+      "extension": ".srt",
+      "format": "{index}\n{start_time} --> {end_time}\n{text}\n"
+    },
+    "vtt-subtitle": {
+      "name": "WebVTT Subtitle",
+      "description": "Web Video Text Tracks format",
+      "extension": ".vtt",
+      "header": "WEBVTT\n\n",
+      "format": "{start_time} --> {end_time}\n{text}\n"
+    },
+    "markdown": {
+      "name": "Markdown",
+      "description": "Markdown formatted text",
+      "extension": ".md",
+      "header": "# Transcription\n\n**Date:** {date}\n**Duration:** {duration}\n**Language:** {language}\n\n---\n\n",
+      "format": "{text}\n\n"
+    },
+    "json": {
+      "name": "JSON",
+      "description": "Structured JSON format",
+      "extension": ".json",
+      "format": "{\n  \"date\": \"{date}\",\n  \"duration\": \"{duration}\",\n  \"language\": \"{language}\",\n  \"model\": \"{model}\",\n  \"segments\": [\n    {segments}\n  ]\n}"
+    },
+    "csv": {
+      "name": "CSV",
+      "description": "Comma-separated values",
+      "extension": ".csv",
+      "header": "Start Time,End Time,Text,Confidence\n",
+      "format": "{start_time},{end_time},\"{text}\",{confidence}"
+    },
+    "html": {
+      "name": "HTML",
+      "description": "HTML document with styling",
+      "extension": ".html",
+      "header": "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"UTF-8\">\n<title>Transcription - {date}</title>\n<style>\nbody { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }\n.segment { margin: 10px 0; padding: 10px; background: #f5f5f5; border-radius: 5px; }\n.timestamp { color: #666; font-size: 0.9em; }\n.confidence-low { opacity: 0.6; }\n.confidence-medium { opacity: 0.8; }\n</style>\n</head>\n<body>\n<h1>Transcription</h1>\n<p><strong>Date:</strong> {date}<br>\n<strong>Duration:</strong> {duration}<br>\n<strong>Language:</strong> {language}</p>\n<hr>\n",
+      "format": "<div class=\"segment confidence-{confidence_level}\">\n<span class=\"timestamp\">[{timestamp}]</span>\n<p>{text}</p>\n</div>\n",
+      "footer": "</body>\n</html>"
+    },
+    "docx-compatible": {
+      "name": "Word Compatible",
+      "description": "RTF format compatible with Word",
+      "extension": ".rtf",
+      "header": "{\\rtf1\\ansi\\deff0 {\\fonttbl{\\f0 Times New Roman;}}\\f0\\fs24 Transcription\\par\\par Date: {date}\\par Duration: {duration}\\par Language: {language}\\par\\par",
+      "format": "[{timestamp}] {text}\\par\\par",
+      "footer": "}"
+    }
+  }
+}

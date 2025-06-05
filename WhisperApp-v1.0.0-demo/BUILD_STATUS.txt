@@ -1,0 +1,9 @@
+Note: Executable build in progress 
+ 
+This package contains the source code and build instructions. 
+A pre-built executable will be available shortly. 
+ 
+To build yourself: 
+1. Install CMake and Visual Studio 2022 
+2. Run: cmake .. -G "Visual Studio 17 2022" -A x64 
+3. Run: cmake --build . --config Release 
