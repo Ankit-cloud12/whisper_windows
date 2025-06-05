@@ -121,47 +121,46 @@ Section "WhisperApp Core" SEC01
   SetOutPath "$INSTDIR"
   
   ; Core application files
-  File /r "..\build\release\WhisperApp.exe"
-  File /r "..\build\release\*.dll"
+  File "..\build\dist\WhisperApp.exe"
+  File /nonfatal "..\build\dist\*.dll"
   
-  ; Qt dependencies
-  File /r "..\build\release\platforms"
-  File /r "..\build\release\styles"
-  File /r "..\build\release\imageformats"
-  File /r "..\build\release\iconengines"
+  ; Qt dependencies (if they exist)
+  File /r /nonfatal "..\build\dist\platforms"
+  File /r /nonfatal "..\build\dist\styles"
+  File /r /nonfatal "..\build\dist\imageformats"
+  File /r /nonfatal "..\build\dist\iconengines"
+  File /r /nonfatal "..\build\dist\generic"
+  File /r /nonfatal "..\build\dist\bearer"
+  File /r /nonfatal "..\build\dist\tls"
   
-  ; Whisper model files
+  ; Models directory (placeholder)
   CreateDirectory "$INSTDIR\models"
-  File /oname=models\ggml-base.en.bin "..\models\ggml-base.en.bin"
+  File /oname=models\README.txt "..\build\dist\models\README.txt"
   
   ; Configuration files
   CreateDirectory "$INSTDIR\config"
-  File /oname=config\default-config.json "..\config\default-config.json"
-  File /oname=config\hotkey-presets.json "..\config\hotkey-presets.json"
-  File /oname=config\export-templates.json "..\config\export-templates.json"
+  File /r "..\build\dist\config\*"
   
   ; Resources
   CreateDirectory "$INSTDIR\resources"
-  File /r "..\resources\icons"
-  File /r "..\resources\sounds"
-  File /r "..\resources\styles"
+  File /r "..\build\dist\resources\*"
   
   ; Documentation
-  File "..\README.md"
-  File "..\USER_GUIDE.md"
-  File "..\CHANGELOG.md"
-  File "..\LICENSE"
+  File "..\build\dist\README.md"
+  File "..\build\dist\USER_GUIDE.md"
+  File "..\build\dist\CHANGELOG.md"
+  File "..\build\dist\LICENSE"
   
-  ; Translations
+  ; Translations (if they exist)
   CreateDirectory "$INSTDIR\translations"
-  File /r "..\build\release\translations\*.qm"
+  File /r /nonfatal "..\build\dist\translations\*"
 SectionEnd
 
 Section "Visual C++ Runtime" SEC02
   SetOutPath "$TEMP"
-  File "${VCREDIST_X64}"
-  ExecWait '"$TEMP\${VCREDIST_X64}" /quiet /norestart'
-  Delete "$TEMP\${VCREDIST_X64}"
+  File "vc_redist.x64.exe"
+  ExecWait '"$TEMP\vc_redist.x64.exe" /quiet /norestart'
+  Delete "$TEMP\vc_redist.x64.exe"
 SectionEnd
 
 Section "File Associations" SEC03
