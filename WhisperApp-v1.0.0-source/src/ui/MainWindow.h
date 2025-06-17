@@ -22,6 +22,8 @@ class QCloseEvent;
 class QShowEvent;
 class QDropEvent;
 class QDragEnterEvent;
+class TrayIcon; // Forward declaration for TrayIcon
+
 
 /**
  * @brief Main application window
@@ -330,4 +332,10 @@ private:
     // Timer
     QTimer* m_recordingTimer;
     int m_recordingDuration;
+
+    // System Tray Icon
+    TrayIcon* m_trayIcon;
+
+    // Processing Visual Cue
+    QLabel* m_processingSpinner;
 };

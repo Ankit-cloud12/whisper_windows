@@ -139,7 +139,7 @@ if(WIN32)
         set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /O2")
         
         # Add manifest file if it exists
-        # set(SOURCES ${SOURCES} resources/WhisperApp.manifest)
+        set(SOURCES ${SOURCES} resources/WhisperApp.manifest)
     endif()
     
     # Add preprocessor definitions for Windows audio

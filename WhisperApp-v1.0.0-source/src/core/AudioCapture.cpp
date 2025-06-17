@@ -6,6 +6,7 @@
 
 #include "AudioCapture.h"
 #include "Logger.h"
+#include "core/ErrorCodes.h" // Added ErrorCodes include
 #include <chrono>
 #include <cmath>
 #include <algorithm>
@@ -180,9 +181,13 @@ public:
         // Initialize COM
         HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
         if (FAILED(hr)) {
+            // This is in constructor, throwing here can be problematic if not handled carefully.
+            // For now, we log and set a flag. initialize() will check this flag.
             LOG_ERROR("AudioCapture", "Failed to initialize COM: " + std::to_string(hr));
+            com_initialized_ = false;
+        } else {
+            com_initialized_ = true;
         }
-        com_initialized_ = SUCCEEDED(hr);
     }
     
     ~Impl() {
@@ -199,7 +204,8 @@ public:
         }
         
         if (!com_initialized_) {
-            LOG_ERROR("AudioCapture", "COM not initialized");
+            LOG_ERROR("AudioCapture", "COM not initialized during construction.");
+            // No throw here, allow initialize() to fail more gracefully or throw.
             return false;
         }
         
@@ -215,8 +221,9 @@ public:
         );
         
         if (FAILED(hr)) {
-            LOG_ERROR("AudioCapture", "Failed to create device enumerator: " + std::to_string(hr));
-            return false;
+            std::string msg = "Failed to create device enumerator. HRESULT: " + std::to_string(hr);
+            LOG_ERROR("AudioCapture", msg);
+            throw AudioException(ErrorCode::SystemResourceUnavailable, msg);
         }
         
         initialized_ = true;
@@ -264,13 +271,17 @@ public:
         );
         
         if (FAILED(hr)) {
-            LOG_ERROR("AudioCapture", "Failed to enumerate audio devices: " + std::to_string(hr));
+            std::string msg = "Failed to enumerate audio devices. HRESULT: " + std::to_string(hr);
+            LOG_ERROR("AudioCapture", msg);
+            // Not throwing here as getAudioDevices might be called for UI listing,
+            // allow returning empty list. Critical failure would be GetDefault or SetDevice.
             return devices;
         }
         
         UINT device_count;
         hr = device_collection->GetCount(&device_count);
         if (FAILED(hr)) {
+            LOG_WARN("AudioCapture", "Failed to get device count. HRESULT: " + std::to_string(hr));
             return devices;
         }
         
@@ -345,8 +356,9 @@ public:
         );
         
         if (FAILED(hr)) {
-            LOG_ERROR("AudioCapture", "Failed to get default audio device: " + std::to_string(hr));
-            return {};
+            std::string msg = "Failed to get default audio device. HRESULT: " + std::to_string(hr);
+            LOG_ERROR("AudioCapture", msg);
+            throw AudioException(ErrorCode::SystemResourceUnavailable, msg);
         }
         
         AudioDevice audio_device = createAudioDeviceInfo(device.Get());
@@ -372,8 +384,9 @@ public:
         }
         
         if (!found) {
-            LOG_ERROR("AudioCapture", "Device not found: " + device_id);
-            return false;
+            std::string msg = "Selected audio device not found: " + device_id;
+            LOG_ERROR("AudioCapture", msg);
+            throw AudioException(ErrorCode::AudioSampleRateInvalid, msg); // Using this as a placeholder for "device not found"
         }
         
         current_device_id_ = device_id;
@@ -516,12 +529,19 @@ private:
     
     bool startCaptureInternal() {
         if (current_device_id_.empty()) {
-            auto default_device = getDefaultDevice();
-            if (default_device.id.empty()) {
-                LOG_ERROR("AudioCapture", "No default audio device found");
-                return false;
+            try {
+                auto default_device = getDefaultDevice(); // This can throw
+                if (default_device.id.empty()) { // Should not happen if getDefaultDevice throws
+                    std::string msg = "No default audio device found and none specified.";
+                    LOG_ERROR("AudioCapture", msg);
+                    throw AudioException(ErrorCode::SystemResourceUnavailable, msg);
+                }
+                current_device_id_ = default_device.id;
+                LOG_INFO("AudioCapture", "Using default audio device: " + current_device_id_);
+            } catch (const AudioException& e) {
+                LOG_ERROR("AudioCapture", "Failed to get default device for capture: " + std::string(e.what()));
+                throw; // Re-throw if getDefaultDevice failed critically
             }
-            current_device_id_ = default_device.id;
         }
         
         // Get the device
@@ -542,24 +562,28 @@ private:
         }
         
         if (FAILED(hr)) {
-            LOG_ERROR("AudioCapture", "Failed to get audio device: " + std::to_string(hr));
-            return false;
+            std::string msg = "Failed to get specified audio device " + current_device_id_ + ". HRESULT: " + std::to_string(hr);
+            LOG_ERROR("AudioCapture", msg);
+            throw AudioException(ErrorCode::SystemResourceUnavailable, msg);
         }
         
         // Activate audio client
         hr = device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr,
                              reinterpret_cast<void**>(audio_client_.GetAddressOf()));
         if (FAILED(hr)) {
-            LOG_ERROR("AudioCapture", "Failed to activate audio client: " + std::to_string(hr));
-            return false;
+            std::string msg = "Failed to activate audio client for device " + current_device_id_ + ". HRESULT: " + std::to_string(hr);
+            LOG_ERROR("AudioCapture", msg);
+            throw AudioException(ErrorCode::SystemResourceUnavailable, msg);
         }
         
         // Get mix format
         WAVEFORMATEX* mix_format;
         hr = audio_client_->GetMixFormat(&mix_format);
         if (FAILED(hr)) {
-            LOG_ERROR("AudioCapture", "Failed to get mix format: " + std::to_string(hr));
-            return false;
+            std::string msg = "Failed to get mix format for device " + current_device_id_ + ". HRESULT: " + std::to_string(hr);
+            LOG_ERROR("AudioCapture", msg);
+            audio_client_.Reset(); // Release client
+            throw AudioException(ErrorCode::AudioFormatUnsupported, msg);
         }
         
         // Store format info
@@ -578,36 +602,45 @@ private:
         
         hr = audio_client_->Initialize(share_mode, flags, buffer_duration, 0, mix_format, nullptr);
         if (FAILED(hr)) {
-            LOG_ERROR("AudioCapture", "Failed to initialize audio client: " + std::to_string(hr));
+            std::string msg = "Failed to initialize audio client for device " + current_device_id_ + ". HRESULT: " + std::to_string(hr);
+            LOG_ERROR("AudioCapture", msg);
             CoTaskMemFree(mix_format);
-            return false;
+            audio_client_.Reset();
+            throw AudioException(ErrorCode::SystemResourceUnavailable, msg);
         }
         
         CoTaskMemFree(mix_format);
+        mix_format = nullptr;
         
         // Create event for audio data available
         audio_event_ = CreateEvent(nullptr, FALSE, FALSE, nullptr);
         if (!audio_event_) {
-            LOG_ERROR("AudioCapture", "Failed to create audio event");
-            return false;
+            std::string msg = "Failed to create audio event for device " + current_device_id_;
+            LOG_ERROR("AudioCapture", msg);
+            audio_client_.Reset();
+            throw AudioException(ErrorCode::SystemResourceUnavailable, msg);
         }
         
         hr = audio_client_->SetEventHandle(audio_event_);
         if (FAILED(hr)) {
-            LOG_ERROR("AudioCapture", "Failed to set event handle: " + std::to_string(hr));
+            std::string msg = "Failed to set event handle for device " + current_device_id_ + ". HRESULT: " + std::to_string(hr);
+            LOG_ERROR("AudioCapture", msg);
             CloseHandle(audio_event_);
             audio_event_ = nullptr;
-            return false;
+            audio_client_.Reset();
+            throw AudioException(ErrorCode::SystemResourceUnavailable, msg);
         }
         
         // Get capture client
         hr = audio_client_->GetService(__uuidof(IAudioCaptureClient),
                                       reinterpret_cast<void**>(capture_client_.GetAddressOf()));
         if (FAILED(hr)) {
-            LOG_ERROR("AudioCapture", "Failed to get capture client: " + std::to_string(hr));
+            std::string msg = "Failed to get capture client for device " + current_device_id_ + ". HRESULT: " + std::to_string(hr);
+            LOG_ERROR("AudioCapture", msg);
             CloseHandle(audio_event_);
             audio_event_ = nullptr;
-            return false;
+            audio_client_.Reset();
+            throw AudioException(ErrorCode::SystemResourceUnavailable, msg);
         }
         
         // Create resampler
@@ -616,10 +649,13 @@ private:
         // Start audio client
         hr = audio_client_->Start();
         if (FAILED(hr)) {
-            LOG_ERROR("AudioCapture", "Failed to start audio client: " + std::to_string(hr));
+            std::string msg = "Failed to start audio client for device " + current_device_id_ + ". HRESULT: " + std::to_string(hr);
+            LOG_ERROR("AudioCapture", msg);
+            capture_client_.Reset();
             CloseHandle(audio_event_);
             audio_event_ = nullptr;
-            return false;
+            audio_client_.Reset();
+            throw AudioException(ErrorCode::SystemResourceUnavailable, msg);
         }
         
         capturing_ = true;

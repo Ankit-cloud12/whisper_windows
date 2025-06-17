@@ -33,10 +33,12 @@
 #include <QUuid>
 #include <QClipboard>
 #include <QStandardPaths>
+#include "TrayIcon.h" // Include TrayIcon header
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
     , m_recording(false)
+    , m_trayIcon(nullptr) // Initialize m_trayIcon
     , m_transcriptionWidget(nullptr)
     , m_audioLevelWidget(nullptr)
     , m_recordButton(nullptr)
@@ -45,9 +47,18 @@ MainWindow::MainWindow(QWidget* parent)
     , m_recordingDuration(0)
     , m_historyWidget(nullptr)
     , m_modelManager(nullptr)
+    , m_processingSpinner(nullptr) // Initialize spinner
 {
     // Initialize ModelManager
     m_modelManager = new ModelManager();
+
+    // Initialize TrayIcon (assuming MainWindow manages it or has access)
+    // In a real application, this might be passed in or created more robustly.
+    m_trayIcon = new TrayIcon(this, this); // Pass 'this' as MainWindow and parent
+    if (m_trayIcon && !TrayIcon::isSystemTrayAvailable()) {
+        Logger::instance().log(Logger::LogLevel::Warning, "MainWindow", "System tray not available, tray icon functionality will be limited.");
+        // Optionally delete m_trayIcon or handle appropriately
+    }
     
     // Initialize ModelManager with models directory
     Settings& settings = Settings::instance();
@@ -136,6 +147,18 @@ void MainWindow::setupUI()
     controlLayout->addWidget(new QLabel("Language:", this));
     controlLayout->addWidget(m_languageCombo);
     controlLayout->addStretch();
+
+    // Processing Spinner
+    m_processingSpinner = new QLabel(this);
+    m_processingSpinner->setObjectName("processingSpinner"); // For QSS styling
+    // Actual animation/content for the spinner is expected to be handled by QSS
+    // For example, a QMovie could be set on it, or a QSS animation.
+    // As a simple placeholder, we can set some text or a character.
+    m_processingSpinner->setText("⏳"); // Placeholder character
+    m_processingSpinner->setToolTip(tr("Processing..."));
+    m_processingSpinner->setVisible(false);
+    controlLayout->addWidget(m_processingSpinner);
+
     controlLayout->addWidget(m_recordingTimeLabel);
     controlLayout->addWidget(m_recordButton);
     controlLayout->addWidget(m_audioLevelWidget);
@@ -518,6 +541,19 @@ void MainWindow::connectSignals()
                 tr("Network connectivity is required for downloading models and updates."));
         });
     }
+
+    // Connect transcription error/complete signals to update tray icon
+    connect(this, &MainWindow::onTranscriptionError, this, [this](const QString& /*error*/){
+        if(m_trayIcon) m_trayIcon->setStatus(TrayIcon::Status::Error);
+    });
+    connect(this, &MainWindow::onTranscriptionComplete, this, [this](const QString& /*text*/){
+        // If not actively recording (e.g. file processing), set to Idle.
+        // If continuous recording, this might need to be Status::Recording.
+        if(m_trayIcon && !m_recording) m_trayIcon->setStatus(TrayIcon::Status::Idle);
+    });
+
+    // Initial check for disabled state (e.g., no model or audio device)
+    checkInitialDisabledState();
     
     Logger::instance().log(Logger::LogLevel::Debug, "MainWindow", "Signals connected");
 }
@@ -527,16 +563,47 @@ void MainWindow::startRecording()
     if (m_recording) {
         return;
     }
-    
+
+    // Check for conditions that might disable recording
+    if (m_modelCombo->currentIndex() < 0 || m_modelCombo->currentData().toString().isEmpty()) {
+        QMessageBox::warning(this, tr("Model Not Selected"), tr("Please select a model before recording."));
+        if (m_trayIcon) m_trayIcon->setStatus(TrayIcon::Status::Error); // Or Disabled
+        m_statusLabel->setText(tr("Error: Model not selected."));
+        m_statusLabel->setStyleSheet("color: red;");
+        m_recordButton->setEnabled(false); // Also disable record button
+        return;
+    }
+    // TODO: Add check for audio device availability here
+    // if (!audioDeviceAvailable) {
+    //     if (m_trayIcon) m_trayIcon->setStatus(TrayIcon::Status::Disabled);
+    //     m_statusLabel->setText(tr("Error: No audio device."));
+    //     m_statusLabel->setStyleSheet("color: red;");
+    //     m_recordButton->setEnabled(false);
+    //     return;
+    // }
+
+    m_recordButton->setEnabled(true); // Ensure enabled if checks pass
+    m_statusLabel->setStyleSheet(""); // Reset color
+    m_processingSpinner->setVisible(false);
+
     m_recording = true;
     m_recordingDuration = 0;
-    updateRecordingState();
+    updateRecordingState(); // Updates UI elements and m_trayIcon status via its own setStatus
     
     emit recordingStarted();
     
     Logger::instance().log(Logger::LogLevel::Info, "MainWindow", "Started recording");
     m_statusLabel->setText(tr("Recording..."));
-    
+    if (m_trayIcon) m_trayIcon->setStatus(TrayIcon::Status::Recording); // Explicitly set recording
+
+    // Simulate start of processing by WhisperEngine immediately after recording starts
+    // In a real scenario, this might be deferred or handled by WhisperEngine signals
+    // For now, we set it to Processing. If recording is long, this might be misleading.
+    // A more robust solution would have WhisperEngine emit a signal when it actually starts processing.
+    // if (m_trayIcon) m_trayIcon->setStatus(TrayIcon::Status::Processing);
+    // Commenting this immediate switch to Processing as recording itself is a state.
+    // Processing should ideally be set when audio data is sent to the engine.
+
     // Update status bar widget
     if (m_statusBarWidget) {
         m_statusBarWidget->setRecordingStatus(true, 0);
@@ -550,13 +617,17 @@ void MainWindow::stopRecording()
     }
     
     m_recording = false;
-    updateRecordingState();
+    updateRecordingState(); // Updates UI elements and m_trayIcon status via its own setStatus
     
     emit recordingStopped();
     
     Logger::instance().log(Logger::LogLevel::Info, "MainWindow", "Stopped recording");
-    m_statusLabel->setText(tr("Processing..."));
     
+    m_statusLabel->setStyleSheet(""); // Reset color
+    m_statusLabel->setText(tr("Processing..."));
+    if(m_processingSpinner) m_processingSpinner->setVisible(true);
+    if (m_trayIcon) m_trayIcon->setStatus(TrayIcon::Status::Processing);
+
     // Update status bar widget
     if (m_statusBarWidget) {
         m_statusBarWidget->setRecordingStatus(false, m_recordingDuration);
@@ -768,8 +839,20 @@ void MainWindow::updateStatusBar()
     // Update main status
     if (m_recording) {
         m_statusLabel->setText(tr("Recording..."));
-    } else {
+        m_statusLabel->setStyleSheet("");
+        if(m_processingSpinner) m_processingSpinner->setVisible(false);
+    } else if (m_trayIcon && m_trayIcon->getStatus() == TrayIcon::Status::Processing) {
+        m_statusLabel->setText(tr("Processing..."));
+        m_statusLabel->setStyleSheet("");
+        if(m_processingSpinner) m_processingSpinner->setVisible(true);
+    } else if (m_trayIcon && (m_trayIcon->getStatus() == TrayIcon::Status::Error || m_trayIcon->getStatus() == TrayIcon::Status::Disabled)) {
+        // Text and color already set by error handling or checkInitialDisabledState
+        if(m_processingSpinner) m_processingSpinner->setVisible(false);
+    }
+    else {
         m_statusLabel->setText(tr("Ready"));
+        m_statusLabel->setStyleSheet("");
+        if(m_processingSpinner) m_processingSpinner->setVisible(false);
     }
     
     // Update status bar widget
@@ -898,6 +981,7 @@ void MainWindow::onModelChanged(int index)
     if (m_statusBarWidget) {
         m_statusBarWidget->setModelStatus(modelName, true);
     }
+    checkInitialDisabledState(); // Re-check if model selection makes app usable
 }
 
 void MainWindow::onLanguageChanged(int index)
@@ -973,16 +1057,63 @@ void MainWindow::onTranscriptionComplete(const QString& text)
     
     Logger::instance().log(Logger::LogLevel::Info, "MainWindow",
                           QString("Transcription complete: %1").arg(text).toStdString());
+    if(m_processingSpinner) m_processingSpinner->setVisible(false);
+    m_statusLabel->setStyleSheet(""); // Reset color
+    // Tray status is set by the onTranscriptionComplete signal connection in connectSignals()
 }
 
 void MainWindow::onTranscriptionError(const QString& error)
 {
+    if(m_processingSpinner) m_processingSpinner->setVisible(false);
     m_statusLabel->setText(tr("Error: %1").arg(error));
+    m_statusLabel->setStyleSheet("color: red;");
     QMessageBox::critical(this, tr("Transcription Error"), error);
     
     Logger::instance().log(Logger::LogLevel::Error, "MainWindow", 
                           QString("Transcription error: %1").arg(error).toStdString());
+    // Tray status is set by the onTranscriptionError signal connection in connectSignals()
 }
+
+void MainWindow::checkInitialDisabledState() {
+    if (!m_trayIcon) return;
+
+    bool modelAvailable = m_modelManager && !m_modelManager->getDownloadedModels().empty();
+    if (m_modelCombo->currentIndex() >= 0 && !m_modelCombo->currentData().toString().isEmpty()) {
+         std::string selectedModelId = m_modelCombo->currentData().toString().toStdString();
+         modelAvailable = m_modelManager && m_modelManager->isModelDownloaded(selectedModelId);
+    } else {
+        modelAvailable = false;
+    }
+
+    // TODO: Add real check for audio device availability
+    bool audioDeviceAvailable = true; // Placeholder for actual check
+
+    if (!modelAvailable) {
+        m_trayIcon->setStatus(TrayIcon::Status::Disabled);
+        m_trayIcon->setTooltip(tr("WhisperApp - Disabled (No valid model selected)"));
+        m_statusLabel->setText(tr("Error: No valid model selected. Please download or select one."));
+        m_statusLabel->setStyleSheet("color: red;");
+        m_recordButton->setEnabled(false);
+        if(m_processingSpinner) m_processingSpinner->setVisible(false);
+    } else if (!audioDeviceAvailable) {
+        m_trayIcon->setStatus(TrayIcon::Status::Disabled);
+        m_trayIcon->setTooltip(tr("WhisperApp - Disabled (No audio device)"));
+        m_statusLabel->setText(tr("Error: No audio input device found."));
+        m_statusLabel->setStyleSheet("color: red;");
+        m_recordButton->setEnabled(false);
+        if(m_processingSpinner) m_processingSpinner->setVisible(false);
+    } else {
+        m_recordButton->setEnabled(true);
+        // If status was Disabled, and not currently recording or processing, set to Idle.
+        if (m_trayIcon->getStatus() == TrayIcon::Status::Disabled && !m_recording && (m_statusLabel->text() != tr("Processing...")) ) {
+            m_trayIcon->setStatus(TrayIcon::Status::Idle);
+            m_statusLabel->setText(tr("Ready"));
+            m_statusLabel->setStyleSheet("");
+        }
+        if(m_processingSpinner) m_processingSpinner->setVisible(false);
+    }
+}
+
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
@@ -1068,6 +1199,7 @@ void MainWindow::populateModelCombo()
     if (index >= 0) {
         m_modelCombo->setCurrentIndex(index);
     }
+    checkInitialDisabledState(); // Check if a valid model is now selected
 }
 
 void MainWindow::populateLanguageCombo()

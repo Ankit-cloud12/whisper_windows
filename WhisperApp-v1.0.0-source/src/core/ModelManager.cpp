@@ -6,7 +6,7 @@
  */
 
 #include "ModelManager.h"
-#include <iostream>
+#include "core/Logger.h" // Added Logger include
 #include <fstream>
 #include <thread>
 #include <chrono>
@@ -214,13 +214,13 @@ public:
             uint64_t max_size = static_cast<uint64_t>(model.size_bytes * 1.05);
             
             if (file_size < min_size || file_size > max_size) {
-                std::cout << "ModelManager: File size out of range for " << model_id 
-                         << " (expected: ~" << model.size_bytes 
-                         << ", actual: " << file_size << ")" << std::endl;
+                LOG_WARN("ModelManager", "File size out of range for " + model_id +
+                                         " (expected: ~" + std::to_string(model.size_bytes) +
+                                         ", actual: " + std::to_string(file_size) + ")");
                 return false;
             }
         } catch (const fs::filesystem_error& e) {
-            std::cout << "ModelManager: Error checking file size: " << e.what() << std::endl;
+            LOG_ERROR("ModelManager", "Error checking file size for " + model_id + ": " + e.what());
             return false;
         }
         
@@ -228,7 +228,7 @@ public:
 #ifdef WHISPER_AVAILABLE
         whisper_context* ctx = whisper_init_from_file(model.local_path.c_str());
         if (!ctx) {
-            std::cout << "ModelManager: Failed to load model with whisper.cpp: " << model_id << std::endl;
+            LOG_WARN("ModelManager", "Failed to load model with whisper.cpp for verification: " + model_id);
             return false;
         }
         whisper_free(ctx);
@@ -245,9 +245,9 @@ public:
         const ModelInfo& model = it->second;
         auto download_state = active_downloads[model_id].get();
         
-        std::cout << "ModelManager: Starting download for " << model_id << std::endl;
-        std::cout << "URL: " << model.url << std::endl;
-        std::cout << "Expected size: " << model.size_bytes << " bytes" << std::endl;
+        LOG_INFO("ModelManager", "Starting download for model: " + model_id);
+        LOG_INFO("ModelManager", "Download URL: " + model.url);
+        LOG_INFO("ModelManager", "Expected size: " + std::to_string(model.size_bytes) + " bytes");
         
         // Initialize network manager if needed
         if (!network_manager) {
@@ -333,21 +333,22 @@ public:
                 try {
                     fs::rename(download_state->temp_file_path, download_state->final_file_path);
                     download_success = true;
-                    std::cout << "ModelManager: Download completed successfully for " << model_id << std::endl;
+                    LOG_INFO("ModelManager", "Download completed successfully for " + model_id);
                 } catch (const fs::filesystem_error& e) {
                     error_message = QString("Failed to move file: %1").arg(e.what());
                     fs::remove(download_state->temp_file_path);
+                    LOG_ERROR("ModelManager", "Failed to move downloaded file for " + model_id + ": " + e.what());
                 }
             } else {
                 // Download failed or was cancelled
                 fs::remove(download_state->temp_file_path);
                 if (download_state->should_cancel) {
                     error_message = "Download cancelled";
+                    LOG_INFO("ModelManager", "Download cancelled for " + model_id);
                 } else {
                     error_message = QString("Network error: %1").arg(reply->errorString());
+                    LOG_ERROR("ModelManager", "Download failed for " + model_id + ": " + error_message.toStdString());
                 }
-                std::cout << "ModelManager: Download failed for " << model_id 
-                         << ": " << error_message.toStdString() << std::endl;
             }
             
             loop.quit();
@@ -385,14 +386,14 @@ bool ModelManager::initialize(const std::string& models_directory) {
     try {
         fs::create_directories(models_directory);
     } catch (const fs::filesystem_error& e) {
-        std::cerr << "ModelManager: Failed to create models directory: " << e.what() << std::endl;
+        LOG_ERROR("ModelManager", "Failed to create models directory " + models_directory + ": " + e.what());
         return false;
     }
     
     // Update model status based on local files
     pImpl->updateModelStatus();
     
-    std::cout << "ModelManager: Initialized with models directory: " << models_directory << std::endl;
+    LOG_INFO("ModelManager", "Initialized with models directory: " + models_directory);
     return true;
 }
 
@@ -509,10 +510,10 @@ bool ModelManager::deleteModel(const std::string& model_id) {
     try {
         fs::remove(it->second.local_path);
         pImpl->updateModelStatus();
-        std::cout << "ModelManager: Deleted model: " << model_id << std::endl;
+        LOG_INFO("ModelManager", "Deleted model: " + model_id);
         return true;
     } catch (const fs::filesystem_error& e) {
-        std::cerr << "ModelManager: Failed to delete model: " << e.what() << std::endl;
+        LOG_ERROR("ModelManager", "Failed to delete model " + model_id + ": " + e.what());
         return false;
     }
 }
@@ -571,10 +572,10 @@ bool ModelManager::importModel(const std::string& file_path, const std::string& 
     try {
         fs::copy_file(file_path, dest_path, fs::copy_options::overwrite_existing);
         pImpl->updateModelStatus();
-        std::cout << "ModelManager: Imported model: " << model_id << std::endl;
+        LOG_INFO("ModelManager", "Imported model " + model_id + " from " + file_path);
         return true;
     } catch (const fs::filesystem_error& e) {
-        std::cerr << "ModelManager: Failed to import model: " << e.what() << std::endl;
+        LOG_ERROR("ModelManager", "Failed to import model " + model_id + " from " + file_path + ": " + e.what());
         return false;
     }
 }
@@ -587,10 +588,10 @@ bool ModelManager::exportModel(const std::string& model_id, const std::string& d
     
     try {
         fs::copy_file(it->second.local_path, destination_path, fs::copy_options::overwrite_existing);
-        std::cout << "ModelManager: Exported model: " << model_id << std::endl;
+        LOG_INFO("ModelManager", "Exported model " + model_id + " to " + destination_path);
         return true;
     } catch (const fs::filesystem_error& e) {
-        std::cerr << "ModelManager: Failed to export model: " << e.what() << std::endl;
+        LOG_ERROR("ModelManager", "Failed to export model " + model_id + " to " + destination_path + ": " + e.what());
         return false;
     }
 }
