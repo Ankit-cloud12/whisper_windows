@@ -34,6 +34,7 @@ class TrayIcon; // Forward declaration for TrayIcon
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
+    friend class TestMainWindowLogic; // Grant access for testing private members/slots
 
 public:
     /**
@@ -195,6 +196,11 @@ private slots:
     void onModelChanged(int index);
     void onLanguageChanged(int index);
     void onTranscriptionChanged();
+    // void applyAlwaysOnTopSetting(); // Moved to public slots
+    void checkInitialDisabledState(); // For status updates
+
+public slots: // Made applyAlwaysOnTopSetting public for testing
+    void applyAlwaysOnTopSetting();
 
 private:
     /**
@@ -334,8 +340,8 @@ private:
     int m_recordingDuration;
 
     // System Tray Icon
-    TrayIcon* m_trayIcon;
+    TrayIcon* m_trayIcon = nullptr;
 
     // Processing Visual Cue
-    QLabel* m_processingSpinner;
+    QLabel* m_processingSpinner = nullptr;
 };

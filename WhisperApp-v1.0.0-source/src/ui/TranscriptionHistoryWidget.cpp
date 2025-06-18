@@ -452,7 +452,7 @@ void TranscriptionHistoryWidget::onSearchTextChanged(const QString& text)
 
 void TranscriptionHistoryWidget::onFilterChanged()
 {
-    m_languageFilter = m_languageFilter->currentData().toString();
+    m_selectedLanguageFilterValue = m_languageFilter->currentData().toString(); // Renamed variable
     m_fromDate = m_fromDateEdit->date();
     m_toDate = m_toDateEdit->date();
     applyFilters();
@@ -583,7 +583,7 @@ bool TranscriptionHistoryWidget::matchesFilters(const TranscriptionHistoryEntry&
     }
     
     // Check language filter
-    if (!m_languageFilter.isEmpty() && entry.language != m_languageFilter) {
+    if (!m_selectedLanguageFilterValue.isEmpty() && entry.language != m_selectedLanguageFilterValue) { // Renamed variable
         return false;
     }
     

@@ -4,18 +4,24 @@
  * Real WASAPI audio capture implementation for Windows
  */
 
+// Ensure windows.h is included first for WIN32 builds
+#ifdef _WIN32 // Or WIN32, ensure consistency with other files if this doesn't work
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
 #include "AudioCapture.h"
 #include "Logger.h"
-#include "core/ErrorCodes.h" // Added ErrorCodes include
+#include "core/ErrorCodes.h"
 #include <chrono>
 #include <cmath>
 #include <algorithm>
 #include <queue>
 #include <condition_variable>
 
-// Windows includes for WASAPI
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
+// Windows includes for WASAPI (already included above if _WIN32 is defined)
+// #define WIN32_LEAN_AND_MEAN // Already defined above
+// #include <windows.h> // Already included above
 #include <mmdeviceapi.h>
 #include <audioclient.h>
 #include <audiopolicy.h>

@@ -160,7 +160,7 @@ private:
     
     // Filter state
     QString m_searchText;
-    QString m_languageFilter;
+    QString m_selectedLanguageFilterValue; // Renamed from m_languageFilter to avoid conflict
     QDate m_fromDate;
     QDate m_toDate;
 };

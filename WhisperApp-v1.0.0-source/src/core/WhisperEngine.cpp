@@ -105,11 +105,11 @@ public:
     // Validate audio format
     void validateAudioFormat(const std::vector<float>& audio_data, int sample_rate) {
         if (audio_data.empty()) {
-            throw AudioException(ErrorCode::AudioDataEmpty, "Audio data is empty");
+            throw WhisperApp::AudioException(WhisperApp::ErrorCode::AudioDataEmpty, "Audio data is empty");
         }
         
         if (sample_rate != audio_requirements.required_sample_rate) {
-            throw AudioException(ErrorCode::AudioSampleRateInvalid,
+            throw WhisperApp::AudioException(WhisperApp::ErrorCode::AudioSampleRateInvalid,
                                "Sample rate must be " +
                                std::to_string(audio_requirements.required_sample_rate) + " Hz");
         }
@@ -117,12 +117,12 @@ public:
         uint64_t duration_ms = (audio_data.size() * 1000) / sample_rate;
         
         if (duration_ms < audio_requirements.min_duration_ms) {
-            throw AudioException(ErrorCode::AudioDurationTooShort,
+            throw WhisperApp::AudioException(WhisperApp::ErrorCode::AudioDurationTooShort,
                                "Audio duration too short: " + std::to_string(duration_ms) + " ms");
         }
         
         if (duration_ms > audio_requirements.max_duration_ms) {
-            throw AudioException(ErrorCode::AudioDurationTooLong,
+            throw WhisperApp::AudioException(WhisperApp::ErrorCode::AudioDurationTooLong,
                                "Audio duration too long: " + std::to_string(duration_ms) + " ms");
         }
     }
@@ -174,7 +174,7 @@ bool WhisperEngine::loadModel(const std::string& model_path) {
     try {
         // Check if file exists
         if (model_path.empty()) {
-            throw ModelException(ErrorCode::ModelNotFound, "Model path is empty");
+            throw WhisperApp::ModelException(WhisperApp::ErrorCode::ModelNotFound, "Model path is empty");
         }
         
         // TODO: Check actual file existence when filesystem is available
@@ -190,7 +190,7 @@ bool WhisperEngine::loadModel(const std::string& model_path) {
         // Real whisper.cpp implementation
         pImpl->ctx = whisper_init_from_file(model_path.c_str());
         if (!pImpl->ctx) {
-            throw ModelException(ErrorCode::ModelLoadFailed,
+            throw WhisperApp::ModelException(WhisperApp::ErrorCode::ModelLoadFailed,
                                "Failed to initialize whisper context");
         }
 
@@ -229,7 +229,7 @@ bool WhisperEngine::loadModel(const std::string& model_path) {
         
         return true;
         
-    } catch (const WhisperException& e) {
+    } catch (const WhisperApp::WhisperException& e) { // Explicitly qualify WhisperException
         LOG_ERROR("WhisperEngine", "Failed to load model: " + std::string(e.what()));
         return false;
     }
@@ -295,7 +295,7 @@ WhisperEngine::TranscriptionResult WhisperEngine::transcribeAudio(
     
     try {
         if (!pImpl->model_loaded) {
-            throw TranscriptionException(ErrorCode::ModelNotLoaded,
+            throw WhisperApp::TranscriptionException(WhisperApp::ErrorCode::ModelNotLoaded,
                                        "No model is loaded");
         }
         
@@ -304,7 +304,7 @@ WhisperEngine::TranscriptionResult WhisperEngine::transcribeAudio(
         
         // Check if already transcribing
         if (pImpl->is_transcribing) {
-            throw TranscriptionException(ErrorCode::TranscriptionInProgress,
+            throw WhisperApp::TranscriptionException(WhisperApp::ErrorCode::TranscriptionInProgress,
                                        "Another transcription is in progress");
         }
         
@@ -343,7 +343,7 @@ WhisperEngine::TranscriptionResult WhisperEngine::transcribeAudio(
         wparams.progress_callback_user_data = pImpl.get();
         
         if (whisper_full(ctx, wparams, audio_data.data(), audio_data.size()) != 0) {
-            throw TranscriptionException(ErrorCode::TranscriptionFailed,
+            throw WhisperApp::TranscriptionException(WhisperApp::ErrorCode::TranscriptionFailed,
                                        "Whisper transcription failed");
         }
         
@@ -372,7 +372,7 @@ WhisperEngine::TranscriptionResult WhisperEngine::transcribeAudio(
         // Simulate processing with progress updates
         for (int i = 0; i <= 10; ++i) {
             if (pImpl->should_cancel) {
-                throw TranscriptionException(ErrorCode::TranscriptionCancelled,
+                throw WhisperApp::TranscriptionException(WhisperApp::ErrorCode::TranscriptionCancelled,
                                            "Transcription was cancelled");
             }
             
@@ -415,7 +415,7 @@ WhisperEngine::TranscriptionResult WhisperEngine::transcribeAudio(
         LOG_INFO("WhisperEngine", "Transcription completed in " +
                  std::to_string(result.processing_time_ms) + " ms");
         
-    } catch (const WhisperException& e) {
+    } catch (const WhisperApp::WhisperException& e) { // Explicitly qualify WhisperException
         LOG_ERROR("WhisperEngine", "Transcription error: " + std::string(e.what()));
         result.text = "Error: " + std::string(e.what());
         result.confidence = 0.0f;
