@@ -1,0 +1,75 @@
+# TranscriptionWidget Context Menu Review
+
+Date: $(date +%Y-%m-%d)
+WhisperApp Version: 1.0.0
+
+## 1. Base Class of `TranscriptionWidget`
+
+-   `TranscriptionWidget` derives from `QWidget`.
+-   It internally uses a `QPlainTextEdit* m_textEdit;` member as its core text editing area.
+
+## 2. Custom Context Menu Existence and Implementation
+
+-   **Yes, a custom context menu exists.**
+-   The `TranscriptionWidget::contextMenuEvent(QContextMenuEvent* event)` method is overridden.
+-   Within this overridden method, it calls `m_contextMenu->exec(event->globalPos());` to display a custom-built menu (`m_contextMenu`).
+-   The base class implementation `QWidget::contextMenuEvent(event)` is **not** called, meaning the default context menu of the `QPlainTextEdit` (if any was set up to be shown through the parent `QWidget`) is entirely replaced by this custom menu.
+-   The custom menu `m_contextMenu` is initialized in the `TranscriptionWidget::createContextMenu()` method, which is called from the constructor.
+
+## 3. Actions Present in the Custom Context Menu
+
+The following actions are created and added to `m_contextMenu`:
+-   `m_undoAction` (Text: "&Undo")
+-   `m_redoAction` (Text: "&Redo")
+-   `m_cutAction` (Text: "Cu&t")
+-   `m_copyAction` (Text: "&Copy")
+-   `m_pasteAction` (Text: "&Paste")
+-   `m_selectAllAction` (Text: "Select &All")
+-   `m_findAction` (Text: "&Find...")
+-   `m_insertTimestampAction` (Text: "Insert &Timestamp")
+
+Separators are used to group these actions logically (Undo/Redo, Cut/Copy/Paste, Select All, Find/Insert Timestamp).
+
+## 4. Confirmation of Standard Editing Action Equivalents
+
+The custom context menu includes equivalents for the following standard text editing actions:
+-   **Cut:** Yes, `m_cutAction`.
+-   **Copy:** Yes, `m_copyAction`.
+-   **Paste:** Yes, `m_pasteAction`.
+-   **Undo:** Yes, `m_undoAction`.
+-   **Redo:** Yes, `m_redoAction`.
+-   **Select All:** Yes, `m_selectAllAction`.
+
+## 5. Connection of Actions to `QPlainTextEdit` Functionality
+
+The standard editing actions in the custom context menu are correctly connected to the corresponding slots of the internal `m_textEdit` (`QPlainTextEdit`) instance. This is done in `TranscriptionWidget::connectSignals()`:
+-   `connect(m_undoAction, &QAction::triggered, m_textEdit, &QPlainTextEdit::undo);`
+-   `connect(m_redoAction, &QAction::triggered, m_textEdit, &QPlainTextEdit::redo);`
+-   `connect(m_cutAction, &QAction::triggered, m_textEdit, &QPlainTextEdit::cut);`
+-   `connect(m_copyAction, &QAction::triggered, m_textEdit, &QPlainTextEdit::copy);`
+-   `connect(m_pasteAction, &QAction::triggered, m_textEdit, &QPlainTextEdit::paste);`
+-   `connect(m_selectAllAction, &QAction::triggered, m_textEdit, &QPlainTextEdit::selectAll);`
+
+The custom actions (`m_findAction`, `m_insertTimestampAction`) are connected to slots within `TranscriptionWidget` itself.
+
+## 6. Assessment of Action Enable/Disable State Handling
+
+The enable/disable state of the standard editing actions appears to be handled correctly.
+-   Qt's `QAction` instances automatically update their enabled state when connected to the standard slots of widgets like `QPlainTextEdit`, based on the widget's internal state (e.g., `undoAvailable`, `copyAvailable`).
+-   This is explicitly reinforced in `TranscriptionWidget::connectSignals()` by connecting the `Available` signals from `m_textEdit` to the `setEnabled` slot of the corresponding `QAction`:
+    -   `connect(m_textEdit, &QPlainTextEdit::undoAvailable, m_undoAction, &QAction::setEnabled);`
+    -   `connect(m_textEdit, &QPlainTextEdit::redoAvailable, m_redoAction, &QAction::setEnabled);`
+    -   `connect(m_textEdit, &QPlainTextEdit::copyAvailable, m_copyAction, &QAction::setEnabled);`
+    -   `connect(m_textEdit, &QPlainTextEdit::copyAvailable, m_cutAction, &QAction::setEnabled);` (Note: `m_cutAction` also depends on `copyAvailable`, which is correct as cutting requires a selection just like copying).
+-   The `m_pasteAction` enable state is typically handled by `QPlainTextEdit` based on clipboard content.
+-   The `m_selectAllAction` is generally always enabled if the widget is enabled.
+-   Custom actions (`m_findAction`, `m_insertTimestampAction`) are always enabled as per their current setup.
+
+## 7. Missing or Incorrectly Implemented Standard Actions
+
+-   **No standard actions appear to be missing or incorrectly implemented.** The custom menu successfully reimplements the common text editing operations.
+-   The standard context menu of `QPlainTextEdit` itself (which might include more actions depending on the Qt version and platform, such as writing direction or input method options) is not shown. However, the implemented custom menu covers all essential editing operations.
+-   The "Find..." action is present, but "Replace..." is noted as a TODO in `TranscriptionWidget::showReplaceDialog()`, so while "Find" is in the context menu, its counterpart "Replace" is not yet functional from a dialog perspective and thus not typically added to a context menu until ready.
+
+**Conclusion:**
+`TranscriptionWidget` uses a custom context menu that successfully provides standard text editing functionalities by connecting its actions to the internal `QPlainTextEdit` instance. The enable/disable states of these standard actions are correctly managed through Qt's signals and slots mechanism.

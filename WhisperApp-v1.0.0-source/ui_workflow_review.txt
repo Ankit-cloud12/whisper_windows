@@ -1,0 +1,109 @@
+# UI Workflow and Status Indication Review
+
+Date: $(date +%Y-%m-%d)
+WhisperApp Version: 1.0.0
+
+## 1. Recording, Processing, and Error State Indication in MainWindow/TranscriptionWidget
+
+**MainWindow:**
+The `MainWindow` class is the primary interface for indicating the application's operational state.
+-   **Recording State:**
+    -   `m_statusLabel` (QLabel in status bar): Displays "Recording...". Its style sheet is reset to default.
+    -   `m_recordButton` (QPushButton): Text changes to "Stop Recording", icon to `:/icons/stop.png`.
+    -   `m_recordingTimeLabel` (QLabel): Becomes visible and updates with elapsed recording time.
+    -   `m_processingSpinner` (QLabel): Hidden.
+    -   `m_trayIcon`: Status set to `TrayIcon::Status::Recording`.
+-   **Processing State (typically after recording stops and before transcription is complete):**
+    -   `m_statusLabel`: Displays "Processing...". Its style sheet is reset to default.
+    -   `m_processingSpinner`: Set to visible.
+    -   `m_trayIcon`: Status set to `TrayIcon::Status::Processing`.
+-   **Error State (e.g., transcription error, no model selected):**
+    -   `m_statusLabel`: Text updated to "Error: [message]". Style sheet set to "color: red;".
+    -   `m_processingSpinner`: Hidden.
+    -   A `QMessageBox::critical` or `QMessageBox::warning` is shown for some errors.
+    -   `m_trayIcon`: Status set to `TrayIcon::Status::Error`.
+    -   `m_recordButton`: Disabled if the error prevents recording (e.g., no model).
+-   **Disabled State (e.g., no model loaded, no audio device):**
+    -   `m_statusLabel`: Text indicates the issue (e.g., "Error: No valid model selected..."). Style sheet set to "color: red;".
+    -   `m_recordButton`: Disabled.
+    -   `m_processingSpinner`: Hidden.
+    -   `m_trayIcon`: Status set to `TrayIcon::Status::Disabled` with an appropriate tooltip.
+-   **Idle/Ready State:**
+    -   `m_statusLabel`: Displays "Ready". Style sheet reset to default.
+    -   `m_processingSpinner`: Hidden.
+    -   `m_recordButton`: Enabled (if prerequisites like model and audio device are met).
+    -   `m_trayIcon`: Status set to `TrayIcon::Status::Idle`.
+
+**TranscriptionWidget:**
+-   `TranscriptionWidget` itself does not directly display these global application states (Recording, Processing, Error). Its role is to display the transcribed text and provide text editing functionalities. It has its own internal states (e.g., modified, selection available) that drive its actions.
+
+## 2. TranscriptionHistoryWidget Capabilities
+
+The `TranscriptionHistoryWidget` provides a robust set of features for managing past transcriptions:
+-   **Display:**
+    -   Uses a `QListWidget` to list history items, showing date/time, duration, and a text snippet.
+    -   Language-specific icons are displayed for entries.
+    -   A `QTextEdit` serves as a preview pane, showing formatted details (metadata and full text) of the selected transcription.
+-   **Data Persistence:**
+    -   Loads and saves history from/to a `transcription_history.json` file in the application's data directory.
+-   **Selection & Activation:**
+    -   Supports single and multiple item selection.
+    -   Double-clicking an item emits `entryActivated`, which in `MainWindow` loads the transcription into the main `TranscriptionWidget`.
+-   **Search and Filtering:**
+    -   Text-based search across transcriptions and audio file names.
+    -   Filtering by language using a dropdown.
+    -   Filtering by date range using `QDateEdit` widgets.
+-   **Actions:**
+    -   **Export Selected:** Allows exporting one or more selected transcriptions to `.txt` or `.csv` files.
+        -   `.txt`: Formatted with metadata and full text.
+        -   `.csv`: Includes Timestamp, Duration, Language, Model, Text.
+    -   **Delete Selected:** Removes selected entries from history (with confirmation).
+    -   **Clear All:** Clears the entire transcription history (with confirmation).
+-   **Statistics:** Displays total number of transcriptions, number shown after filtering, and total duration of all transcriptions.
+
+## 3. TranscriptionWidget Base Class and Context Menu
+
+-   **Base Class:** `TranscriptionWidget` derives from `QWidget`. Internally, it uses a `QPlainTextEdit* m_textEdit` as the core component for text display and editing.
+-   **Context Menu:**
+    -   `TranscriptionWidget::contextMenuEvent(QContextMenuEvent* event)` is overridden.
+    -   Inside this method, a custom context menu (`m_contextMenu`) is created and shown (`m_contextMenu->exec(event->globalPos());`).
+    -   This custom menu includes standard actions like "Undo", "Redo", "Cut", "Copy", "Paste", "Select All", as well as application-specific actions like "Find..." and "Insert Timestamp".
+    -   The standard actions (Undo, Redo, etc.) are connected to the corresponding slots of the internal `m_textEdit` widget (e.g., `connect(m_undoAction, &QAction::triggered, m_textEdit, &QPlainTextEdit::undo);`).
+    -   **Finding:** The standard context menu provided by `QPlainTextEdit` is therefore **replaced** by this custom one. However, since the custom menu recreates many of the standard editing actions and connects them directly to the `QPlainTextEdit` instance, most standard text editing context menu *functionalities* are preserved and accessible.
+
+## 4. Suggestions for Improving Visual Cues in MainWindow / TranscriptionWidget
+
+-   **MainWindow:**
+    -   **Processing State:** The current `m_processingSpinner` (a QLabel with "⏳") is basic.
+        -   **Suggestion:** Use a `QMovie` with an animated GIF (e.g., a small spinner) set on `m_processingSpinner` for a more conventional and clear busy indication. The QSS class `.loading-spinner` (if defined with an animation) could also style this QLabel if it's empty or has a specific structure.
+        -   **Suggestion:** Consider changing the `m_recordButton`'s icon and disabling it during the "Processing" phase to prevent re-triggering actions while the app is busy with transcription. If processing can happen *while* still recording (e.g. live mode), this needs careful state management. Current flow implies processing starts *after* recording stops.
+    -   **Error State Clarity:**
+        -   **Suggestion:** In addition to `m_statusLabel` turning red, briefly flashing the status bar background or the `m_statusLabel` background on new errors could draw more attention.
+    -   **Disabled State:**
+        -   **Suggestion:** When `m_recordButton` is disabled by `checkInitialDisabledState`, its tooltip should be updated to explain why (e.g., "Recording disabled - No model selected").
+-   **TranscriptionWidget:**
+    -   **Highlighting during Processing:** If a transcription is being actively processed and results are incrementally added to `TranscriptionWidget`, consider a subtle visual cue for the text area itself (e.g., a slightly different background, or a "Processing..." watermark) until the final result is available. This is more relevant if live, incremental updates are shown.
+
+## 5. Feasibility and Suggestions for `TranscriptionHistoryWidget` Enhancements
+
+The `TranscriptionHistoryWidget` is already quite functional. "Export Selected" and "Clear History" are implemented.
+
+-   **Feasibility of Further Enhancements:**
+    -   **More Export Formats (e.g., HTML, SRT):**
+        -   **HTML:** Feasible. `TranscriptionWidget` already has an `exportToHtml` method. This logic could be adapted or called if an entry's text is loaded into a temporary `TranscriptionWidget` or if `TranscriptionHistoryWidget` can access the necessary formatting logic.
+        -   **SRT:** Feasible. `TranscriptionWidget` has `exportToSrt`. Similar to HTML, this would require parsing the text for timestamps or having pre-parsed segment data available for history entries. The current `TranscriptionHistoryEntry` struct does not store segments, only full text and overall duration. For accurate SRT, segment-level timestamp data would be needed.
+    -   **Group Actions (e.g., batch delete by date/language):** Feasible. Requires adding UI elements for criteria selection and then iterating through `m_history` to apply actions.
+    -   **Advanced Search (case sensitivity, specific fields):** Feasible. Requires adding UI options and modifying `matchesFilters` to respect these options.
+    -   **Sorting:** Feasible but requires changing `m_historyList` from `QListWidget` to `QTableWidget` or `QTreeView` to easily support clickable column headers for sorting. This is a moderate refactoring of the display part.
+    -   **Directly Play Audio:** Feasible if audio file paths are stored (which `entry.audioFile` is) and are local. Requires using `QMediaPlayer` or similar Qt Multimedia components. A play button could be added to the preview area or list item.
+
+## 6. Obvious Missing Standard Text Editing Features in `TranscriptionWidget`
+
+While `QPlainTextEdit` provides a lot, and `TranscriptionWidget` adds to it:
+-   **Replace Functionality:** `showReplaceDialog()` is a TODO. A full find/replace dialog is a standard feature.
+-   **Font Customization:** Users typically expect to be able to change font family, style (bold, italic), and have more granular control over size than just zoom levels. This would involve `QFontDialog` and persisting the choice.
+-   **Printing:** No actions related to printing the transcription content.
+-   **Spell Checking:** Not present. This is a more advanced feature but standard in many editors.
+-   **Rich Text Formatting Toolbar:** While there's syntax highlighting, there's no toolbar for users to apply basic formatting (bold, italic, lists) if this were desired beyond automatic highlighting. (This might be out of scope if the widget is primarily for *displaying* transcriptions).
+
+This review covers the requested aspects of the UI workflow and component capabilities.

@@ -15,6 +15,10 @@
 #ifndef CLIPBOARDMANAGER_H
 #define CLIPBOARDMANAGER_H
 
+#ifdef _WIN32
+#include <windows.h> // Moved to the top
+#endif
+
 #include <QObject>
 #include <QString>
 #include <memory>

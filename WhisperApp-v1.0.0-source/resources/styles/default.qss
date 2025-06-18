@@ -145,6 +145,11 @@ QPushButton:disabled {
     color: #666666;
 }
 
+QPushButton:focus {
+    outline: 2px solid #2196f3; /* Theme accent color */
+    outline-offset: 1px;
+}
+
 QPushButton:flat {
     background-color: transparent;
     color: #2196f3;
@@ -560,7 +565,7 @@ StatusBarWidget QPushButton:hover {
 }
 
 /* Focus animations */
-QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
     /* Subtle glow effect on focus */
     box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2);
 }

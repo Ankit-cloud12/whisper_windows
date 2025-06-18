@@ -499,10 +499,10 @@ void SettingsDialog::createAppearanceTab()
     m_windowOpacitySpin->setRange(50, 100);
     m_windowOpacitySpin->setSuffix("%");
     
-    m_alwaysOnTopCheck = new QCheckBox(tr("Always on top"), windowGroup);
+    m_alwaysOnTopCheckBox = new QCheckBox(tr("Always on Top"), windowGroup); // Corrected member name
     
     windowLayout->addRow(tr("Window opacity:"), m_windowOpacitySpin);
-    windowLayout->addRow(m_alwaysOnTopCheck);
+    windowLayout->addRow(m_alwaysOnTopCheckBox); // Added the new checkbox to layout
     
     // Connect signals
     connect(changeFontButton, &QPushButton::clicked, this, &SettingsDialog::selectFont);
@@ -637,7 +637,9 @@ defaultModelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), enableAp
     // Appearance tab
     connect(m_themeButtonGroup, QOverload<int>::of(&QButtonGroup::idClicked), enableApply);
     connect(m_windowOpacitySpin, QOverload<int>::of(&QSpinBox::valueChanged), enableApply);
-    connect(m_alwaysOnTopCheck, &QCheckBox::toggled, enableApply);
+    if (m_alwaysOnTopCheckBox) { // Check if initialized
+        connect(m_alwaysOnTopCheckBox, &QCheckBox::toggled, enableApply);
+    }
     
     // Advanced tab
     connect(m_threadCountSpin, QOverload<int>::of(&QSpinBox::valueChanged), enableApply);
@@ -751,7 +753,9 @@ void SettingsDialog::loadSettings()
     m_speakerColorButton->setPalette(speakerPalette);
     
     m_windowOpacitySpin->setValue(settings.getSetting(Settings::Key::WindowOpacity).toInt());
-    m_alwaysOnTopCheck->setChecked(settings.getSetting(Settings::Key::AlwaysOnTop).toBool());
+    if (m_alwaysOnTopCheckBox) { // Check if initialized
+        m_alwaysOnTopCheckBox->setChecked(settings.isAlwaysOnTop());
+    }
     
     // Advanced tab
     m_threadCountSpin->setValue(settings.getSetting(Settings::Key::ThreadCount).toInt());
@@ -821,7 +825,9 @@ void SettingsDialog::saveSettings()
     settings.setSetting(Settings::Key::SpeakerColor, speakerPalette.color(QPalette::Button).name());
     
     settings.setSetting(Settings::Key::WindowOpacity, m_windowOpacitySpin->value());
-    settings.setSetting(Settings::Key::AlwaysOnTop, m_alwaysOnTopCheck->isChecked());
+    if (m_alwaysOnTopCheckBox) { // Check if initialized
+        settings.setAlwaysOnTop(m_alwaysOnTopCheckBox->isChecked());
+    }
     
     // Advanced tab
     settings.setSetting(Settings::Key::ThreadCount, m_threadCountSpin->value());

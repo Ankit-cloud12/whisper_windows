@@ -90,6 +90,9 @@ namespace SettingsKey {
     constexpr const char* MODELS_DIRECTORY = "Advanced/ModelsDirectory";
     constexpr const char* DOWNLOAD_SPEED_LIMIT = "Advanced/DownloadSpeedLimit";
     constexpr const char* TELEMETRY_ENABLED = "Advanced/TelemetryEnabled";
+
+    // Window settings (could also be UI)
+    constexpr const char* ALWAYS_ON_TOP = "Window/AlwaysOnTop";
 }
 
 /**

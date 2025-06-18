@@ -1,0 +1,154 @@
+# QSS Theming Review and Suggestions
+
+Date: $(date +%Y-%m-%d)
+Version: 1.0.0 (based on provided QSS files)
+
+## 1. Assessment of Current Focus Styling
+
+The focus styling for input fields (`QLineEdit`, `QTextEdit`, `QPlainTextEdit`, `QComboBox`, `QSpinBox`, `QDoubleSpinBox`) across the three themes (`dark.qss`, `default.qss`, `light.qss`) is generally consistent and provides clear visual feedback.
+
+**Key observations:**
+- All themes use a `2px` solid border on focus for these input fields.
+- The border color is an accent color specific to each theme.
+- Padding is correctly adjusted within the `:focus` style to prevent the element from changing its overall size due to the thicker border.
+- `dark.qss` and `light.qss` explicitly define a `box-shadow` (glow effect) for `QLineEdit:focus` and `QTextEdit:focus`.
+- `default.qss` also applies a similar `box-shadow` to `QLineEdit:focus`, `QTextEdit:focus`, and `QPlainTextEdit:focus` through a shared rule.
+
+**Area for Improvement:**
+- **`QPushButton:focus`**: None of the themes provide a distinct default focus style for `QPushButton`s when they are not in a `:hover` or `:pressed` state. While a `.high-contrast QPushButton:focus` style exists, this doesn't cover the standard theming. This can make keyboard navigation less clear.
+- **`QComboBox`/`QSpinBox` focus glow**: The `box-shadow` (glow effect) applied to `QLineEdit` and `QTextEdit` on focus is not consistently applied to `QComboBox` and `QSpinBox` in the `dark.qss` and `light.qss` themes. `default.qss` has a general rule that could be slightly expanded.
+
+## 2. Specific QSS Modification Suggestions
+
+The following are minor, consistent adjustments suggested to enhance focus visibility and consistency.
+
+### 2.1. Add Default Focus Style for `QPushButton`
+
+To improve keyboard navigation feedback, add a subtle focus indicator for `QPushButton`. An outline is suggested to minimize interference with existing hover/press effects.
+
+**For `dark.qss`:**
+```qss
+/* Add this rule */
+QPushButton:focus {
+    outline: 2px solid #0e639c; /* Theme accent color */
+    outline-offset: 1px;
+    /* Alternatively, if an outline is undesirable, consider a subtle border color change or inset shadow if not already styled for :hover */
+    /* border: 1px solid #0e639c; */ /* Ensure this doesn't conflict with existing borders */
+}
+```
+
+**For `default.qss`:**
+```qss
+/* Add this rule */
+QPushButton:focus {
+    outline: 2px solid #2196f3; /* Theme accent color */
+    outline-offset: 1px;
+}
+```
+
+**For `light.qss`:**
+```qss
+/* Add this rule */
+QPushButton:focus {
+    outline: 2px solid #03a9f4; /* Theme accent color */
+    outline-offset: 1px;
+}
+```
+
+### 2.2. Consistent Focus Glow for Input-Type Widgets
+
+To make the focus indication more uniform across all text/data entry widgets, extend the `box-shadow` (glow effect) to `QComboBox`, `QSpinBox`, and `QDoubleSpinBox` when they are focused.
+
+**For `dark.qss`:**
+Modify existing `:focus` styles for `QComboBox`, `QSpinBox`, `QDoubleSpinBox`.
+
+*Original `QComboBox:focus` & `QSpinBox:focus` (excerpt):*
+```qss
+QComboBox:focus {
+    border: 2px solid #0e639c;
+    padding: 4px 9px;
+}
+
+QSpinBox:focus, QDoubleSpinBox:focus {
+    border: 2px solid #0e639c;
+    padding: 4px 9px;
+}
+```
+
+*Proposed `QComboBox:focus` & `QSpinBox:focus` (adding `box-shadow`):*
+```qss
+QComboBox:focus {
+    border: 2px solid #0e639c;
+    padding: 4px 9px;
+    box-shadow: 0 0 0 3px rgba(14, 99, 156, 0.2); /* Same shadow as QLineEdit:focus */
+}
+
+QSpinBox:focus, QDoubleSpinBox:focus {
+    border: 2px solid #0e639c;
+    padding: 4px 9px;
+    box-shadow: 0 0 0 3px rgba(14, 99, 156, 0.2); /* Same shadow as QLineEdit:focus */
+}
+```
+
+**For `default.qss`:**
+Modify the existing shared rule for focus `box-shadow`.
+
+*Original rule (excerpt):*
+```qss
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
+    /* Subtle glow effect on focus */
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2);
+}
+```
+
+*Proposed rule (adding `QComboBox:focus`, `QSpinBox:focus`, `QDoubleSpinBox:focus`):*
+```qss
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
+    /* Subtle glow effect on focus */
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2);
+}
+```
+
+**For `light.qss`:**
+Modify existing `:focus` styles for `QComboBox`, `QSpinBox`, `QDoubleSpinBox`.
+
+*Original `QComboBox:focus` & `QSpinBox:focus` (excerpt):*
+```qss
+QComboBox:focus {
+    border: 2px solid #03a9f4;
+    padding: 4px 9px;
+}
+
+QSpinBox:focus, QDoubleSpinBox:focus {
+    border: 2px solid #03a9f4;
+    padding: 4px 9px;
+}
+```
+
+*Proposed `QComboBox:focus` & `QSpinBox:focus` (adding `box-shadow`):*
+```qss
+QComboBox:focus {
+    border: 2px solid #03a9f4;
+    padding: 4px 9px;
+    box-shadow: 0 0 0 3px rgba(3, 169, 244, 0.1); /* Same shadow as QLineEdit:focus */
+}
+
+QSpinBox:focus, QDoubleSpinBox:focus {
+    border: 2px solid #03a9f4;
+    padding: 4px 9px;
+    box-shadow: 0 0 0 3px rgba(3, 169, 244, 0.1); /* Same shadow as QLineEdit:focus */
+}
+```
+
+## 3. Icon Paths for User Review
+
+The following icon paths are referenced in the QSS files. It is suggested that these (and other icons used by the application) be reviewed for style consistency. If the application targets Windows primarily, consider aligning with a modern style like Segoe Fluent Icons or a suitable cross-platform icon library.
+
+- `url(:/icons/arrow-down.png)` (used in QComboBox)
+- `url(:/icons/check.png)` (used in QCheckBox)
+
+This list is not exhaustive but represents commonly styled elements. A full audit of all icons in `resources/icons/` against the application's overall design language would be beneficial.
+
+## 4. Conclusion
+
+The existing QSS themes provide a good foundation. The suggested modifications are minor and aim to enhance consistency in focus indication, particularly for keyboard users, without altering the core design of each theme. Reviewing and potentially modernizing the icon set would further improve the application's visual polish.

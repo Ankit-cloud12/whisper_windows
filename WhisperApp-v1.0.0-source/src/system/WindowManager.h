@@ -15,6 +15,10 @@
 #ifndef WINDOWMANAGER_H
 #define WINDOWMANAGER_H
 
+#ifdef _WIN32
+#include <windows.h> // Moved to the top
+#endif
+
 #include <QObject>
 #include <QRect>
 #include <QString>
@@ -22,10 +26,10 @@
 #include <vector>
 #include <string>
 
-// Windows types
-#ifdef _WIN32
-#include <windows.h>
-#endif
+// Windows types - a second include guard is fine, or remove this one
+// #ifdef _WIN32
+// #include <windows.h>
+// #endif
 
 // Forward declarations
 class QWidget;
