@@ -43,7 +43,7 @@ namespace UIUtils
         // Apply initial theme
         applyTheme(g_currentTheme);
         
-        Logger::instance().log(Logger::LogLevel::Info, "UIUtils", 
+        WhisperApp::Logger::getInstance().log(WhisperApp::LogLevel::Info, "UIUtils",
                              QString("UI initialized with DPI scale: %1").arg(g_dpiScale).toStdString());
     }
     
@@ -93,7 +93,7 @@ namespace UIUtils
             qApp->setPalette(palette);
         }
         
-        Logger::instance().log(Logger::LogLevel::Debug, "UIUtils", 
+        WhisperApp::Logger::getInstance().log(WhisperApp::LogLevel::Debug, "UIUtils",
                              QString("Applied theme: %1").arg(static_cast<int>(effectiveTheme)).toStdString());
     }
     
@@ -207,7 +207,7 @@ namespace UIUtils
         
         msgBox.exec();
         
-        Logger::instance().log(Logger::LogLevel::Error, "UIUtils", 
+        WhisperApp::Logger::getInstance().log(WhisperApp::LogLevel::Error, "UIUtils",
                              QString("Error dialog: %1 - %2").arg(title, message).toStdString());
     }
     
@@ -215,7 +215,7 @@ namespace UIUtils
     {
         QMessageBox::warning(parent, title, message);
         
-        Logger::instance().log(Logger::LogLevel::Warning, "UIUtils", 
+        WhisperApp::Logger::getInstance().log(WhisperApp::LogLevel::Warning, "UIUtils",
                              QString("Warning dialog: %1 - %2").arg(title, message).toStdString());
     }
     
@@ -363,7 +363,7 @@ namespace UIUtils
     {
         if (format.isEmpty()) {
             // Use locale-specific format
-            return timestamp.toString(Qt::DefaultLocaleLongDate);
+            return timestamp.toString(Qt::SystemLocaleLongDate);
         }
         return timestamp.toString(format);
     }
@@ -471,7 +471,7 @@ namespace UIUtils
             return stream.readAll();
         }
         
-        Logger::instance().log(Logger::LogLevel::Warning, "UIUtils", 
+        WhisperApp::Logger::getInstance().log(WhisperApp::LogLevel::Warning, "UIUtils",
                              QString("Failed to load stylesheet: %1").arg(path).toStdString());
         return QString();
     }

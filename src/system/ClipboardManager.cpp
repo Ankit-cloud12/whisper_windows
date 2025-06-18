@@ -1,8 +1,13 @@
+#define WIN32_LEAN_AND_MEAN // Must be defined before windows.h
 #include "ClipboardManager.h"
 #include <iostream>
 #include <QClipboard>
 #include <QApplication>
 #include <QMimeData>
+#include <QDateTime>
+#include <QRegularExpression>
+
+#include <windows.h> // For INPUT, WORD, SendInput, etc.
 
 ClipboardManager::ClipboardManager(QObject* parent)
     : QObject(parent)
@@ -12,13 +17,20 @@ ClipboardManager::ClipboardManager(QObject* parent)
     // - Get system clipboard instance
     // - Connect clipboard change signals
     
-    m_clipboard = QApplication::clipboard();
-    if (m_clipboard) {
-        connect(m_clipboard, &QClipboard::dataChanged,
-                this, &ClipboardManager::onClipboardChanged);
-        std::cout << "ClipboardManager: Initialized" << std::endl;
+    if (QApplication::instance()) {
+        m_clipboard = QApplication::clipboard();
+        if (m_clipboard) {
+            connect(m_clipboard, &QClipboard::dataChanged,
+                    this, &ClipboardManager::onClipboardChanged);
+            std::cout << "ClipboardManager: Initialized" << std::endl;
+        } else {
+            // This case should ideally not happen if QApplication::instance() is valid
+            // and QApplication::clipboard() returned null, but good to log.
+            std::cerr << "Error: QApplication::clipboard() returned null even with a valid QApplication instance. ClipboardManager may not function correctly." << std::endl;
+        }
     } else {
-        std::cout << "ClipboardManager: Failed to get clipboard instance" << std::endl;
+        std::cerr << "Error: QApplication instance not available. ClipboardManager will not function correctly." << std::endl;
+        // m_clipboard remains nullptr, and no signals are connected.
     }
 }
 
@@ -26,6 +38,21 @@ ClipboardManager::~ClipboardManager()
 {
     // TODO: Clean up resources
     // No explicit cleanup needed for clipboard
+}
+
+bool ClipboardManager::initialize()
+{
+    // TODO: Perform any necessary one-time setup
+    std::cout << "ClipboardManager::initialize() called" << std::endl;
+    // For now, just return true. Future implementations might do more.
+    return true;
+}
+
+void ClipboardManager::shutdown()
+{
+    // TODO: Perform any necessary cleanup before application exits
+    std::cout << "ClipboardManager::shutdown() called" << std::endl;
+    // Future implementations might disconnect signals or release resources.
 }
 
 void ClipboardManager::setText(const QString& text)

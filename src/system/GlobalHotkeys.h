@@ -16,6 +16,7 @@
 #define GLOBALHOTKEYS_H
 
 #include <QObject>
+#include <QAbstractNativeEventFilter>
 #include <QString>
 #include <QKeySequence>
 #include <memory>
@@ -56,7 +57,7 @@ struct HotkeyInfo {
 /**
  * @brief Global hotkey manager
  */
-class GlobalHotkeys : public QObject {
+class GlobalHotkeys : public QObject, public QAbstractNativeEventFilter {
     Q_OBJECT
 
 public:
@@ -201,9 +202,7 @@ protected:
      * @param message Windows message
      * @return true if message was handled
      */
-    bool nativeEventFilter(const QByteArray& eventType, 
-                          void* message, 
-                          long* result) override;
+    bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result) override;
 
 private:
     /**
@@ -247,12 +246,12 @@ private:
 
 private:
     // Hotkey storage
-    std::map<HotkeyAction, HotkeyInfo> hotkeys;
+    std::map<HotkeyAction, HotkeyInfo> m_hotkeys;
     std::map<int, HotkeyAction> id_to_action;
     
     // State
     bool initialized = false;
-    int next_hotkey_id = 1000;
+    int m_nextHotkeyId = 1000;
     bool push_to_talk_active = false;
     
     // Window handle for message processing
